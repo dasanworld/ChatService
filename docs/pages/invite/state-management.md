@@ -784,29 +784,103 @@ function InvitePage({ params }: { params: Promise<{ token: string }> }) {
 
 ---
 
+## 🔗 Context 간 의존성
+
+### 초대 페이지의 Context 사용
+
+**→ AuthContext** (읽기 전용):
+```typescript
+const { user, isAuthenticated } = useAuth();
+
+// 인증 상태 확인 후 분기
+if (!isAuthenticated) {
+  router.push(`/login?redirectedFrom=/invite/${token}`);
+} else {
+  // 자동 방 참가
+  await joinRoom(roomId);
+}
+```
+
+**→ UIContext** (선택적):
+```typescript
+const { showToast } = useUI();
+
+// 방 참가 실패 시
+showToast('error', '채팅방 참가에 실패했습니다');
+```
+
+**설계 결정**: 
+- useState로 로컬 상태 관리 (일회성 작업)
+- Context + useReducer 불필요 (과도한 추상화 피함)
+
+---
+
+## 📦 최종 Provider 계층 구조
+
+> **Note**: 초대 페이지는 AuthProvider만 필수입니다. UIContext는 선택적으로 사용합니다.
+
+```typescript
+// src/app/providers.tsx
+export default function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>              {/* ✅ 필수: 인증 상태 확인 */}
+        <NetworkProvider>
+          <UIProvider>            {/* 🔵 선택: Toast 알림용 */}
+            <RoomListProvider>
+              {children}
+            </RoomListProvider>
+          </UIProvider>
+        </NetworkProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+}
+```
+
+**초대 페이지의 Context 사용:**
+- ✅ **AuthProvider**: 로그인 상태 확인 (필수)
+- 🔵 **UIProvider**: Toast 알림 (선택)
+- ❌ NetworkProvider: 불필요
+- ❌ RoomListProvider: 초대 수락 후 접근 가능
+
+**초대 흐름:**
+```
+1. /invite/abc123 접속
+2. useInvite Hook (useState 기반)
+3. AuthContext에서 isAuthenticated 확인
+4. 비로그인 → /login?redirectedFrom=/invite/abc123
+5. 로그인됨 → 방 참가 API → /chat-room/:id
+```
+
+---
+
 ## ✅ 구현 체크리스트
 
 ### Phase 1: Hook
 - [ ] `src/features/invite/hooks/useInvite.ts` 생성
-- [ ] 초대 토큰 검증 로직
+- [ ] 초대 토큰 검증 로직 (useState 기반)
 - [ ] 인증 상태 확인 및 리다이렉션
 - [ ] 방 참가 API 호출
+- [ ] 만료 시간 체크
 
 ### Phase 2: Page
 - [ ] `src/app/invite/[token]/page.tsx` 생성
-- [ ] 로딩 상태 UI
-- [ ] 에러 상태 UI
-- [ ] 성공 상태 UI
+- [ ] 로딩 상태 UI (Spinner + 메시지)
+- [ ] 에러 상태 UI (만료, 무효 토큰)
+- [ ] 성공 상태 UI (자동 리다이렉트)
 
 ### Phase 3: Integration
-- [ ] useSignup, useLogin에서 invite 파라미터 처리
+- [ ] useSignup에서 invite 파라미터 처리 (로그인 후 초대 페이지 복귀)
+- [ ] useLogin에서 invite 파라미터 처리
 - [ ] UIContext에 invite 토큰 임시 저장 (선택)
 
 ### Phase 4: 테스트
-- [ ] 비로그인 사용자 플로우
-- [ ] 로그인된 사용자 플로우
-- [ ] 유효하지 않은 토큰
-- [ ] 만료된 토큰
+- [ ] 비로그인 사용자 플로우 (signup → 초대 복귀)
+- [ ] 로그인된 사용자 플로우 (자동 참가)
+- [ ] 유효하지 않은 토큰 에러 처리
+- [ ] 만료된 토큰 에러 처리
+- [ ] 이미 참여 중인 방 처리
 
 ---
 

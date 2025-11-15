@@ -1522,6 +1522,83 @@ function CreateRoomModal() {
 
 ---
 
+## 🔗 Context 간 의존성
+
+### RoomListContext의 외부 참조
+
+**← ActiveRoomContext** (chat-room 페이지에서 호출):
+- `updateLastMessage(roomId, message)`: 현재 채팅방에서 새 메시지 전송 시 호출
+- `incrementUnread(roomId)`: 다른 방에서 메시지 수신 시 호출 (Long Polling)
+- `resetUnread(roomId)`: 채팅방 입장 시 호출
+
+**→ AuthContext** (읽기 전용):
+- `user.id`: 방 생성, 참가 권한 확인
+
+**→ UIContext** (협력):
+- `showToast()`: 방 생성/나가기 성공/실패 알림
+- `openModal()`: 방 설정, 나가기 확인 모달
+
+```typescript
+// 예시: ActiveRoomContext에서 RoomListContext 업데이트
+const { updateLastMessage, incrementUnread, resetUnread } = useRoomList();
+
+// 방 입장 시
+enterRoom(roomId) {
+  // ...
+  resetUnread(roomId); // 안읽은 메시지 초기화
+}
+
+// 메시지 전송 시
+sendMessage(content) {
+  // ...
+  updateLastMessage(roomId, message); // 방 목록의 lastMessage 업데이트
+}
+
+// Long Polling에서 다른 방 메시지 수신 시
+onPollingEvent(event) {
+  if (event.room_id !== currentRoomId) {
+    incrementUnread(event.room_id); // 다른 방의 안읽은 메시지 증가
+  }
+}
+```
+
+---
+
+## 📦 최종 Provider 계층 구조
+
+```typescript
+// src/app/providers.tsx
+export default function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>              {/* 1. 인증 (최상위) */}
+        <NetworkProvider>         {/* 2. 네트워크 상태 */}
+          <UIProvider>            {/* 3. UI 상태 (모달, Toast) */}
+            <RoomListProvider>    {/* 4. 방 목록 */}
+              {children}          {/* 5. ActiveRoomProvider는 chat-room 페이지에서만 */}
+            </RoomListProvider>
+          </UIProvider>
+        </NetworkProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+}
+
+// chat-room 페이지 layout에서만:
+<ActiveRoomProvider>
+  {children}
+</ActiveRoomProvider>
+```
+
+**계층 순서 이유:**
+1. **AuthProvider**: 모든 Context가 user 정보 필요
+2. **NetworkProvider**: 독립적이지만 전역 상태
+3. **UIProvider**: 모든 페이지에서 Toast, Modal 사용
+4. **RoomListProvider**: Dashboard + Chat에서 사용
+5. **ActiveRoomProvider**: Chat 페이지에서만 필요 (페이지 레벨)
+
+---
+
 ## ✅ 구현 체크리스트
 
 ### Phase 1: RoomListContext
@@ -1538,7 +1615,8 @@ function CreateRoomModal() {
 
 ### Phase 3: Provider 통합
 - [ ] `src/app/providers.tsx`에 RoomListProvider, UIProvider 추가
-- [ ] 의존성 순서 확인 (Auth → UI → RoomList)
+- [ ] 의존성 순서 확인 (Auth → Network → UI → RoomList)
+- [ ] ActiveRoomProvider는 chat-room layout에 추가
 
 ### Phase 4: 컴포넌트
 - [ ] Dashboard 페이지에서 useRoomList, useUI 사용

@@ -617,27 +617,83 @@ function useLogin(): UseLoginReturn {
 
 ---
 
+## 🔗 Context 간 의존성
+
+### 로그인 페이지의 Context 사용
+
+**→ AuthContext** (공유, signup과 동일):
+```typescript
+const { login, status, error } = useAuth();
+
+// useLogin 훅에서 AuthContext의 login 함수 사용
+const handleLogin = async (email: string, password: string) => {
+  await login(email, password);
+  // redirect 로직
+};
+```
+
+**차이점**:
+- signup: 회원가입 후 자동 로그인 → dashboard
+- login: 로그인 → inviteToken > redirectedFrom > dashboard
+
+---
+
+## 📦 최종 Provider 계층 구조
+
+> **Note**: 로그인 페이지는 AuthProvider만 사용합니다. 전체 Provider 계층 구조는 [signup/state-management.md](../signup/state-management.md#📦-최종-provider-계층-구조)를 참고하세요.
+
+```typescript
+// src/app/providers.tsx
+export default function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>              {/* Login 페이지는 여기만 사용 */}
+        <NetworkProvider>
+          <UIProvider>
+            <RoomListProvider>
+              {children}
+            </RoomListProvider>
+          </UIProvider>
+        </NetworkProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+}
+```
+
+**로그인 페이지의 Context 사용:**
+- ✅ **AuthProvider**: 로그인 처리
+- ❌ NetworkProvider: 불필요
+- ❌ UIProvider: 불필요 (로그인 페이지는 Toast 사용 안 함)
+- ❌ RoomListProvider: 로그인 후 접근 가능
+
+---
+
 ## ✅ 구현 체크리스트
 
 ### Phase 1: Hook 생성
 - [ ] `src/features/auth/hooks/useLogin.ts` 생성
-- [ ] 리다이렉션 로직 구현
+- [ ] AuthContext의 `login` 함수 래핑
+- [ ] 리다이렉션 로직 구현 (inviteToken > redirectedFrom > dashboard)
 - [ ] 에러 처리 구현
 
 ### Phase 2: 컴포넌트
 - [ ] `src/features/auth/components/LoginForm.tsx` 생성
-- [ ] 폼 검증 연동
+- [ ] 폼 검증 연동 (react-hook-form + zod)
 - [ ] 로딩 상태 UI
+- [ ] 에러 메시지 표시
 
 ### Phase 3: 페이지 통합
 - [ ] `src/app/login/page.tsx` 수정
 - [ ] LoginForm 컴포넌트 사용
-- [ ] 이미 로그인된 사용자 리다이렉션
+- [ ] 이미 로그인된 사용자 자동 리다이렉션
+- [ ] URL 파라미터 처리 (redirectedFrom, inviteToken)
 
 ### Phase 4: 테스트
 - [ ] 로그인 플로우 테스트
-- [ ] 리다이렉션 시나리오 테스트
-- [ ] 에러 처리 테스트
+- [ ] 리다이렉션 시나리오 테스트 (3가지 경로)
+- [ ] 에러 처리 테스트 (잘못된 비밀번호 등)
+- [ ] 초대 토큰과 함께 로그인 테스트
 
 ---
 

@@ -961,6 +961,67 @@ function useAuthStatus() {
 
 ---
 
+## 🔗 Context 간 의존성
+
+### AuthContext의 외부 참조
+
+**독립적 Context** (최상위 레벨):
+- AuthContext는 다른 Context에 의존하지 않음
+- 모든 다른 Context가 AuthContext를 읽기 전용으로 사용
+
+**→ 사용하는 Context들**:
+- RoomListContext: `user.id`로 방 생성/참가 권한 확인
+- ActiveRoomContext: `user.id`로 본인 메시지 판별
+- UIContext: 로그아웃 시 모달/Toast 초기화
+
+```typescript
+// 다른 Context에서 AuthContext 사용 예시
+function RoomListProvider({ children }) {
+  const { user, isAuthenticated } = useAuth(); // 읽기 전용
+  
+  const createRoom = async (name: string) => {
+    if (!isAuthenticated) {
+      throw new Error('로그인이 필요합니다');
+    }
+    // user.id를 사용하여 방 생성
+  };
+}
+```
+
+---
+
+## 📦 최종 Provider 계층 구조
+
+```typescript
+// src/app/providers.tsx
+export default function Providers({ children }: { children: React.ReactNode }) {
+  const queryClient = getQueryClient();
+
+  return (
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>              {/* 1. 인증 (최상위) */}
+          <NetworkProvider>         {/* 2. 네트워크 상태 */}
+            <UIProvider>            {/* 3. UI 상태 (모달, Toast) */}
+              <RoomListProvider>    {/* 4. 방 목록 */}
+                {children}
+              </RoomListProvider>
+            </UIProvider>
+          </NetworkProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
+  );
+}
+```
+
+**AuthProvider가 최상위인 이유:**
+- 모든 API 호출에 인증 정보(session token) 필요
+- 다른 모든 Context가 `user` 정보에 접근 필요
+- 로그아웃 시 모든 하위 Context 상태 초기화 가능
+
+---
+
 ## ✅ 구현 체크리스트
 
 ### Phase 1: AuthContext 생성
@@ -974,13 +1035,15 @@ function useAuthStatus() {
 - [ ] 기존 `useCurrentUser` Hook과 통합 검토
 
 ### Phase 3: Provider 통합
-- [ ] `src/app/providers.tsx`에 AuthProvider 추가
+- [ ] `src/app/providers.tsx`에 AuthProvider 추가 (최상위)
 - [ ] 모든 페이지에서 AuthContext 접근 가능하도록 설정
+- [ ] 로그아웃 시 하위 Context 초기화 로직 확인
 
 ### Phase 4: 테스트
 - [ ] 회원가입 플로우 테스트
 - [ ] 에러 처리 테스트
 - [ ] 리다이렉션 테스트
+- [ ] 세션 만료 시 자동 로그아웃 테스트
 
 ---
 

@@ -1641,6 +1641,115 @@ setTimeout(() => {
 
 ---
 
+## 🔗 Context 간 의존성
+
+### ActiveRoomContext의 외부 참조
+
+**→ RoomListContext** (업데이트 호출):
+```typescript
+const { updateLastMessage, incrementUnread, resetUnread } = useRoomList();
+
+// 1. 방 입장 시: 안읽은 메시지 초기화
+enterRoom(roomId) {
+  // Snapshot 로드 후
+  resetUnread(roomId);
+}
+
+// 2. 메시지 전송/수신 시: 방 목록의 lastMessage 업데이트
+onPollingEvent(events) {
+  events.forEach(event => {
+    if (event.type === 'message_created') {
+      updateLastMessage(roomId, {
+        content: event.payload.content,
+        created_at: event.payload.created_at,
+        sender_nickname: event.payload.user_nickname,
+      });
+    }
+  });
+}
+
+// 3. Long Polling에서 다른 방 메시지 수신 시: 안읽은 메시지 증가
+onPollingEvent(events) {
+  events.forEach(event => {
+    if (event.room_id !== currentRoomId) {
+      incrementUnread(event.room_id);
+    }
+  });
+}
+```
+
+**→ NetworkContext** (재연결 로직):
+```typescript
+const { shouldRetry, nextRetryDelay, recordSyncAttempt, recordSyncSuccess, recordSyncFailure } = useNetwork();
+
+// Long Polling 시도 시
+useLongPolling() {
+  recordSyncAttempt();
+  
+  try {
+    const response = await api.get('/rooms/:id/updates');
+    recordSyncSuccess();
+  } catch (error) {
+    recordSyncFailure(error.message);
+    // exponential backoff으로 재시도
+    setTimeout(poll, nextRetryDelay);
+  }
+}
+```
+
+**→ AuthContext** (읽기 전용):
+- `user.id`: 본인 메시지 판별, 삭제 권한 확인
+
+**→ UIContext** (협력):
+- `showToast()`: 메시지 전송 실패, 삭제 완료 알림
+
+---
+
+## 📦 최종 Provider 계층 구조
+
+```typescript
+// src/app/providers.tsx (전역)
+export default function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>              {/* 1. 인증 (최상위) */}
+        <NetworkProvider>         {/* 2. 네트워크 상태 */}
+          <UIProvider>            {/* 3. UI 상태 (모달, Toast) */}
+            <RoomListProvider>    {/* 4. 방 목록 */}
+              {children}          {/* ActiveRoomProvider는 별도 */}
+            </RoomListProvider>
+          </UIProvider>
+        </NetworkProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+}
+
+// src/app/(protected)/chat-room/layout.tsx (페이지 레벨)
+export default function ChatRoomLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <ActiveRoomProvider>       {/* 5. 현재 채팅방 (Chat 페이지만) */}
+      {children}
+    </ActiveRoomProvider>
+  );
+}
+```
+
+**ActiveRoomProvider를 페이지 레벨에 두는 이유:**
+1. Chat 페이지에서만 필요 (Dashboard에서는 불필요)
+2. 방 입장/퇴장 시 Provider mount/unmount로 자동 정리
+3. 메모리 효율성 (사용하지 않을 때는 상태 유지 안 함)
+4. Long Polling도 페이지 이탈 시 자동 중단
+
+**계층 순서:**
+1. **AuthProvider**: 모든 API 호출에 user 정보 필요
+2. **NetworkProvider**: Long Polling 재연결 로직에 필요
+3. **UIProvider**: Toast 알림에 사용
+4. **RoomListProvider**: 방 목록 업데이트에 필요
+5. **ActiveRoomProvider**: 위 모든 Context에 의존
+
+---
+
 ## ✅ 구현 체크리스트
 
 ### Phase 1: NetworkContext
@@ -1655,14 +1764,16 @@ setTimeout(() => {
 - [ ] `src/features/active-room/hooks/useLongPolling.ts`
 
 ### Phase 3: Provider 통합
-- [ ] `src/app/providers.tsx`에 NetworkProvider, ActiveRoomProvider 추가
-- [ ] 의존성 순서: Auth → Network → RoomList → ActiveRoom → UI
+- [ ] `src/app/providers.tsx`에 NetworkProvider 추가 (전역)
+- [ ] `src/app/(protected)/chat-room/layout.tsx`에 ActiveRoomProvider 추가 (페이지 레벨)
+- [ ] 의존성 순서: Auth → Network → UI → RoomList → ActiveRoom
 
 ### Phase 4: 컴포넌트
 - [ ] ChatRoom 페이지에서 useActiveRoom 사용
 - [ ] MessageList 구현 (가상 스크롤링)
 - [ ] MessageInput 구현
 - [ ] MessageItem 구현 (답장, 좋아요, 삭제)
+- [ ] NetworkBanner 구현 (오프라인 알림)
 
 ---
 
