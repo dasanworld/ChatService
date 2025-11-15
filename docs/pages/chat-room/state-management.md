@@ -811,6 +811,836 @@ graph TB
 
 ---
 
+## 🏛️ Context 아키텍처 상세 설계
+
+### ActiveRoomContext + NetworkContext 데이터 흐름
+
+```mermaid
+graph TB
+    subgraph "ActiveRoomProvider"
+        A1[ActiveRoomState<br/>messages, participants, pollingStatus]
+        A2[activeRoomReducer]
+        A3[Action Creators<br/>sendMessage, toggleLike, deleteMessage]
+        A4[useLongPolling Hook<br/>자동 실행]
+    end
+    
+    subgraph "NetworkProvider"
+        N1[NetworkState<br/>isOnline, retryCount, backoffDelay]
+        N2[networkReducer]
+        N3[Internal Actions<br/>recordSyncAttempt, recordSyncSuccess]
+    end
+    
+    subgraph "Data Sources"
+        D1[API: GET /api/rooms/:id/snapshot]
+        D2[API: POST /api/rooms/:id/messages]
+        D3[API: GET /api/rooms/:id/updates<br/>Long Polling 60s timeout]
+        D4[API: POST /api/messages/:id/like]
+    end
+    
+    subgraph "Child Components"
+        C1[MessageList<br/>가상 스크롤]
+        C2[MessageInput]
+        C3[MessageItem]
+        C4[ParticipantList]
+        C5[NetworkBanner]
+    end
+    
+    A3 -->|dispatch| A2
+    A2 -->|update| A1
+    A4 -->|dispatch| A2
+    
+    N3 -->|dispatch| N2
+    N2 -->|update| N1
+    
+    A3 -->|fetch| D2
+    A3 -->|fetch| D4
+    A4 -->|fetch| D1
+    A4 -->|fetch| D3
+    
+    A4 -.->|check| N1
+    A4 -->|record| N3
+    
+    A1 -->|subscribe| C1
+    A1 -->|subscribe| C2
+    A1 -->|subscribe| C3
+    A1 -->|subscribe| C4
+    N1 -->|subscribe| C5
+    
+    C2 -->|call| A3
+    C3 -->|call| A3
+    
+    style A1 fill:#e8f5e9
+    style N1 fill:#fff9c4
+    style A2 fill:#fff4e1
+    style N2 fill:#fff4e1
+    style A4 fill:#ffebee
+```
+
+---
+
+### ActiveRoomState 인터페이스 설계
+
+```typescript
+/**
+ * ActiveRoomContext의 중앙 상태
+ * - 현재 보고 있는 채팅방의 모든 상태
+ */
+interface ActiveRoomState {
+  // ===== 기본 정보 =====
+  roomId: string | null;
+  roomInfo: RoomDetail | null;
+  
+  // ===== 메시지 관련 =====
+  messages: Message[];              // 확정된 메시지 목록
+  pendingMessages: Map<string, PendingMessage>;  // 전송 중인 메시지 (Optimistic UI)
+  
+  // ===== 참여자 =====
+  participants: Participant[];
+  
+  // ===== Long Polling 상태 =====
+  lastSyncVersion: number;          // 마지막 동기화 버전
+  pollingStatus: 'idle' | 'live' | 'catchup' | 'error';
+  
+  // ===== UI 상태 =====
+  likedMessageIds: Set<string>;     // 내가 좋아요한 메시지 ID
+  hiddenMessageIds: Set<string>;    // 나만 삭제한 메시지 ID
+  replyTarget: Message | null;      // 답장 대상 메시지
+  
+  // ===== 히스토리 로딩 =====
+  isLoadingHistory: boolean;
+  hasMoreHistory: boolean;
+  oldestMessageVersion: number | null;
+  
+  // ===== 전체 상태 =====
+  status: 'idle' | 'loading' | 'loaded' | 'error';
+  error: string | null;
+}
+
+/**
+ * Message 엔티티
+ */
+interface Message {
+  id: string;
+  room_id: string;
+  user_id: string;
+  user_nickname: string;
+  user_avatar_url?: string;
+  content: string;
+  reply_to_message_id: string | null;
+  like_count: number;
+  is_deleted: boolean;
+  client_message_id: string | null;  // Optimistic UI 매칭용
+  created_at: string;
+  updated_at: string;
+  version: number;                    // Long Polling 버전 관리
+}
+
+/**
+ * PendingMessage (Optimistic UI)
+ */
+interface PendingMessage {
+  clientId: string;                   // 고유 임시 ID
+  content: string;
+  status: 'sending' | 'error';
+  error?: string;
+  replyToId?: string;
+  created_at: string;
+}
+
+/**
+ * RoomDetail 엔티티
+ */
+interface RoomDetail {
+  id: string;
+  name: string;
+  participant_count: number;
+  created_at: string;
+  creator_id: string;
+}
+
+/**
+ * Participant 엔티티
+ */
+interface Participant {
+  id: string;                         // room_participants.id
+  user_id: string;
+  nickname: string;
+  avatar_url?: string;
+  role: 'owner' | 'member';
+  joined_at: string;
+  last_read_version?: number;         // 읽음 표시용
+}
+
+/**
+ * RoomEvent (Long Polling 응답)
+ */
+interface RoomEvent {
+  type: 'message_created' | 'message_updated' | 'message_deleted' | 'message_liked' | 'participant_joined' | 'participant_left';
+  version: number;
+  payload: any;
+}
+```
+
+---
+
+### ActiveRoomAction 인터페이스 설계
+
+```typescript
+/**
+ * ActiveRoom Reducer Actions
+ */
+type ActiveRoomAction =
+  // ===== 방 입장/퇴장 =====
+  | {
+      type: 'ENTER_ROOM';
+      payload: {
+        roomId: string;
+      };
+    }
+  | {
+      type: 'EXIT_ROOM';
+    }
+  | {
+      type: 'SNAPSHOT_SUCCESS';
+      payload: {
+        roomInfo: RoomDetail;
+        messages: Message[];
+        participants: Participant[];
+        lastSyncVersion: number;
+      };
+    }
+  | {
+      type: 'SNAPSHOT_FAILURE';
+      payload: {
+        error: string;
+      };
+    }
+  
+  // ===== 메시지 전송 (Optimistic UI) =====
+  | {
+      type: 'MESSAGE_SEND_REQUEST';
+      payload: {
+        clientId: string;
+        content: string;
+        replyToId?: string;
+      };
+    }
+  | {
+      type: 'MESSAGE_SEND_SUCCESS';
+      payload: {
+        clientId: string;
+        message: Message;
+      };
+    }
+  | {
+      type: 'MESSAGE_SEND_FAILURE';
+      payload: {
+        clientId: string;
+        error: string;
+      };
+    }
+  
+  // ===== Long Polling 이벤트 =====
+  | {
+      type: 'POLLING_EVENT_RECEIVED';
+      payload: {
+        events: RoomEvent[];
+        privateDeletions: string[];   // 나만 삭제한 메시지 ID
+        lastVersion: number;
+        hasMore: boolean;             // catchup 모드 판단
+      };
+    }
+  | {
+      type: 'POLLING_ERROR';
+      payload: {
+        error: string;
+      };
+    }
+  
+  // ===== 히스토리 로딩 =====
+  | {
+      type: 'LOAD_HISTORY_REQUEST';
+    }
+  | {
+      type: 'LOAD_HISTORY_SUCCESS';
+      payload: {
+        messages: Message[];
+        hasMore: boolean;
+      };
+    }
+  | {
+      type: 'LOAD_HISTORY_FAILURE';
+      payload: {
+        error: string;
+      };
+    }
+  
+  // ===== 메시지 액션 =====
+  | {
+      type: 'MESSAGE_LIKE_TOGGLE';
+      payload: {
+        messageId: string;
+        isLiked: boolean;             // 현재 좋아요 상태
+      };
+    }
+  | {
+      type: 'MESSAGE_DELETE_LOCAL';
+      payload: {
+        messageId: string;
+      };
+    }
+  | {
+      type: 'SET_REPLY_TARGET';
+      payload: {
+        message: Message | null;
+      };
+    }
+  
+  // ===== 참여자 =====
+  | {
+      type: 'PARTICIPANT_JOINED';
+      payload: {
+        participant: Participant;
+      };
+    }
+  | {
+      type: 'PARTICIPANT_LEFT';
+      payload: {
+        userId: string;
+      };
+    };
+```
+
+---
+
+### ActiveRoomContext 노출 인터페이스
+
+```typescript
+/**
+ * useActiveRoom() 훅이 반환하는 인터페이스
+ */
+interface ActiveRoomContextValue {
+  // ===== 상태 값 (Read-only) =====
+  
+  roomId: string | null;
+  roomInfo: RoomDetail | null;
+  messages: Message[];
+  participants: Participant[];
+  replyTarget: Message | null;
+  pollingStatus: ActiveRoomState['pollingStatus'];
+  status: ActiveRoomState['status'];
+  error: string | null;
+  
+  
+  // ===== 계산된 값 (Derived State) =====
+  
+  /**
+   * 화면에 표시할 메시지 목록
+   * - messages + pendingMessages 병합
+   * - hiddenMessageIds 필터링
+   * - 시간순 정렬
+   */
+  visibleMessages: (Message | PendingMessage)[];
+  
+  /**
+   * 현재 방 정보
+   */
+  currentRoom: RoomDetail | null;
+  
+  /**
+   * Long Polling 활성 상태
+   */
+  isPollingActive: boolean;
+  // computed: pollingStatus === 'live' || pollingStatus === 'catchup'
+  
+  /**
+   * 로딩 중 여부
+   */
+  isLoading: boolean;
+  
+  /**
+   * 과거 메시지 더 있는지
+   */
+  hasMoreHistory: boolean;
+  
+  /**
+   * 히스토리 로딩 중
+   */
+  isLoadingHistory: boolean;
+  
+  /**
+   * 전송 중인 메시지 수
+   */
+  pendingCount: number;
+  // computed: pendingMessages.size
+  
+  
+  // ===== Action Creator 함수 =====
+  
+  /**
+   * 방 입장
+   * - Snapshot 로드
+   * - Long Polling 시작
+   * - RoomListContext의 resetUnread 호출
+   */
+  enterRoom: (roomId: string) => Promise<void>;
+  
+  /**
+   * 방 퇴장
+   * - Long Polling 중단
+   * - 상태 초기화
+   */
+  exitRoom: () => void;
+  
+  /**
+   * 과거 메시지 더 불러오기
+   * - 스크롤 상단 도달 시 호출
+   */
+  loadMoreHistory: () => Promise<void>;
+  
+  /**
+   * 메시지 전송
+   * - Optimistic UI
+   * - client_message_id 생성
+   * @throws {Error} 전송 실패 시
+   */
+  sendMessage: (content: string, replyToId?: string) => Promise<void>;
+  
+  /**
+   * 메시지 좋아요 토글
+   * - Optimistic UI
+   */
+  toggleLike: (messageId: string) => Promise<void>;
+  
+  /**
+   * 메시지 삭제
+   * @param deleteType - 'all': 모두에게 삭제, 'me': 나만 삭제
+   */
+  deleteMessage: (messageId: string, deleteType: 'all' | 'me') => Promise<void>;
+  
+  /**
+   * 답장 대상 설정
+   */
+  setReplyTarget: (message: Message | null) => void;
+  
+  /**
+   * 특정 메시지로 스크롤
+   */
+  scrollToMessage: (messageId: string) => void;
+}
+```
+
+---
+
+### NetworkState 인터페이스 설계
+
+```typescript
+/**
+ * NetworkContext의 중앙 상태
+ * - 네트워크 상태 및 재연결 로직
+ */
+interface NetworkState {
+  // 온라인 상태
+  isOnline: boolean;
+  
+  // 마지막 동기화 시도 시간
+  lastSyncAttempt: string | null;
+  
+  // 재시도 횟수
+  retryCount: number;
+  
+  // 현재 백오프 지연 시간 (ms)
+  backoffDelay: number;               // 100ms → 200ms → 400ms → ... → 30000ms
+  
+  // 동기화 상태
+  syncStatus: 'idle' | 'syncing' | 'error';
+}
+
+/**
+ * Network Reducer Actions
+ */
+type NetworkAction =
+  | {
+      type: 'STATUS_CHANGE';
+      payload: {
+        isOnline: boolean;
+      };
+    }
+  | {
+      type: 'SYNC_ATTEMPT';
+    }
+  | {
+      type: 'SYNC_SUCCESS';
+    }
+  | {
+      type: 'SYNC_FAILURE';
+      payload: {
+        error: string;
+      };
+    }
+  | {
+      type: 'RESET_BACKOFF';
+    };
+```
+
+---
+
+### NetworkContext 노출 인터페이스
+
+```typescript
+/**
+ * useNetwork() 훅이 반환하는 인터페이스
+ */
+interface NetworkContextValue {
+  // ===== 상태 값 =====
+  
+  isOnline: boolean;
+  lastSyncAttempt: string | null;
+  retryCount: number;
+  backoffDelay: number;
+  syncStatus: NetworkState['syncStatus'];
+  
+  
+  // ===== 계산된 값 =====
+  
+  /**
+   * 재시도 가능 여부
+   */
+  shouldRetry: boolean;
+  // computed: isOnline && syncStatus !== 'syncing'
+  
+  /**
+   * 다음 재시도 지연 시간
+   */
+  nextRetryDelay: number;
+  // computed: backoffDelay
+  
+  
+  // ===== Internal API (ActiveRoomContext에서만 사용) =====
+  
+  recordSyncAttempt: () => void;
+  recordSyncSuccess: () => void;
+  recordSyncFailure: (error: string) => void;
+  resetBackoff: () => void;
+}
+```
+
+---
+
+### useLongPolling Hook 설계
+
+```typescript
+/**
+ * Long Polling 자동 실행 Hook
+ * - ActiveRoomContext 내부에서만 사용
+ * - useEffect로 자동 시작/중단
+ */
+function useLongPolling(
+  roomId: string | null,
+  lastSyncVersion: number,
+  pollingStatus: ActiveRoomState['pollingStatus'],
+  onEvents: (data: {
+    events: RoomEvent[];
+    privateDeletions: string[];
+    lastVersion: number;
+    hasMore: boolean;
+  }) => void,
+  enabled: boolean,
+): void {
+  // 내부 구현:
+  // 1. AbortController로 요청 취소 관리
+  // 2. NetworkContext에서 shouldRetry, nextRetryDelay 가져오기
+  // 3. 재귀적으로 poll() 함수 호출
+  // 4. catchup 모드일 때 빠른 재요청 (100ms)
+  // 5. live 모드일 때 일반 재요청 (즉시)
+  // 6. 에러 시 exponential backoff
+}
+```
+
+---
+
+### Context 간 협력 시나리오: 메시지 전송
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant MessageInput
+    participant ActiveRoomContext
+    participant ActiveRoomReducer
+    participant RoomListContext
+    participant RoomListReducer
+    participant NetworkContext
+    participant API
+    participant useLongPolling
+    
+    Note over User: 메시지 입력 후 전송
+    User->>MessageInput: Enter 키 누름
+    MessageInput->>ActiveRoomContext: sendMessage(content)
+    
+    Note over ActiveRoomContext: 1. Optimistic UI
+    ActiveRoomContext->>ActiveRoomContext: clientId = uuid()
+    ActiveRoomContext->>ActiveRoomReducer: dispatch(MESSAGE_SEND_REQUEST)
+    ActiveRoomReducer->>ActiveRoomReducer: pendingMessages.set(clientId)
+    ActiveRoomReducer-->>MessageInput: 화면에 "전송 중..." 표시
+    
+    Note over ActiveRoomContext: 2. API 호출
+    ActiveRoomContext->>API: POST /api/rooms/:id/messages
+    API-->>ActiveRoomContext: {success: true}
+    
+    Note over useLongPolling: 3. Long Polling이 이벤트 수신
+    useLongPolling->>NetworkContext: recordSyncAttempt()
+    useLongPolling->>API: GET /api/rooms/:id/updates?since_version=X
+    API-->>useLongPolling: {events: [message_created], last_version: Y}
+    useLongPolling->>NetworkContext: recordSyncSuccess()
+    
+    Note over useLongPolling: 4. 이벤트 처리
+    useLongPolling->>ActiveRoomContext: onEvents(data)
+    ActiveRoomContext->>ActiveRoomReducer: dispatch(POLLING_EVENT_RECEIVED)
+    
+    Note over ActiveRoomReducer: 5. Pending 제거 및 실제 메시지 추가
+    ActiveRoomReducer->>ActiveRoomReducer: if (msg.client_message_id === clientId)
+    ActiveRoomReducer->>ActiveRoomReducer: pendingMessages.delete(clientId)
+    ActiveRoomReducer->>ActiveRoomReducer: messages.push(serverMessage)
+    ActiveRoomReducer-->>MessageInput: "전송 중..." 제거, 실제 메시지 표시
+    
+    Note over ActiveRoomContext: 6. RoomListContext 업데이트
+    ActiveRoomContext->>RoomListContext: updateLastMessage(roomId, message)
+    RoomListContext->>RoomListReducer: dispatch(UPDATE_LAST_MESSAGE)
+    RoomListReducer->>RoomListReducer: 방 목록의 lastMessage 업데이트
+```
+
+---
+
+### 하위 컴포넌트 사용 예시
+
+```typescript
+// ===== ChatRoomPage.tsx =====
+function ChatRoomPage({ params }: { params: Promise<{ roomId: string }> }) {
+  const { roomId } = use(params);
+  const {
+    enterRoom,
+    exitRoom,
+    visibleMessages,
+    isLoading,
+    currentRoom,
+  } = useActiveRoom();
+  
+  useEffect(() => {
+    enterRoom(roomId);
+    return () => exitRoom();
+  }, [roomId]);
+  
+  if (isLoading) return <LoadingSpinner />;
+  if (!currentRoom) return <NotFound />;
+  
+  return (
+    <div className="chat-container">
+      <ChatHeader room={currentRoom} />
+      <MessageList messages={visibleMessages} />
+      <MessageInput />
+    </div>
+  );
+}
+
+// ===== MessageList.tsx =====
+function MessageList({ messages }: { messages: (Message | PendingMessage)[] }) {
+  const {
+    loadMoreHistory,
+    hasMoreHistory,
+    isLoadingHistory,
+  } = useActiveRoom();
+  
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // 스크롤 상단 감지
+  const handleScroll = () => {
+    if (scrollContainerRef.current.scrollTop === 0 && hasMoreHistory) {
+      loadMoreHistory();
+    }
+  };
+  
+  return (
+    <div ref={scrollContainerRef} onScroll={handleScroll}>
+      {isLoadingHistory && <Spinner />}
+      {messages.map(msg => (
+        <MessageItem key={'id' in msg ? msg.id : msg.clientId} message={msg} />
+      ))}
+    </div>
+  );
+}
+
+// ===== MessageInput.tsx =====
+function MessageInput() {
+  const {
+    sendMessage,
+    replyTarget,
+    setReplyTarget,
+  } = useActiveRoom();
+  
+  const [content, setContent] = useState('');
+  
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!content.trim()) return;
+    
+    try {
+      await sendMessage(content, replyTarget?.id);
+      setContent('');
+      setReplyTarget(null);
+    } catch (error) {
+      // 에러 처리
+    }
+  };
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      {replyTarget && (
+        <ReplyPreview
+          message={replyTarget}
+          onCancel={() => setReplyTarget(null)}
+        />
+      )}
+      <Input
+        value={content}
+        onChange={e => setContent(e.target.value)}
+        placeholder="메시지를 입력하세요..."
+      />
+      <Button type="submit">전송</Button>
+    </form>
+  );
+}
+
+// ===== MessageItem.tsx =====
+function MessageItem({ message }: { message: Message | PendingMessage }) {
+  const { toggleLike, deleteMessage, setReplyTarget } = useActiveRoom();
+  const { user } = useAuth();
+  
+  // Pending 메시지 판별
+  const isPending = 'clientId' in message;
+  const isMyMessage = !isPending && message.user_id === user?.id;
+  
+  const handleLike = () => {
+    if (!isPending) {
+      toggleLike(message.id);
+    }
+  };
+  
+  const handleReply = () => {
+    if (!isPending) {
+      setReplyTarget(message);
+    }
+  };
+  
+  const handleDelete = (type: 'all' | 'me') => {
+    if (!isPending) {
+      deleteMessage(message.id, type);
+    }
+  };
+  
+  return (
+    <div className={`message ${isPending ? 'pending' : ''} ${isMyMessage ? 'mine' : ''}`}>
+      {!isPending && <Avatar src={message.user_avatar_url} />}
+      <div className="content">
+        {!isPending && <strong>{message.user_nickname}</strong>}
+        <p>{message.content}</p>
+        {isPending && message.status === 'sending' && <Spinner size="sm" />}
+        {isPending && message.status === 'error' && <ErrorIcon />}
+      </div>
+      {!isPending && (
+        <Actions>
+          <Button onClick={handleLike}>👍 {message.like_count}</Button>
+          <Button onClick={handleReply}>답장</Button>
+          {isMyMessage && (
+            <>
+              <Button onClick={() => handleDelete('all')}>모두 삭제</Button>
+              <Button onClick={() => handleDelete('me')}>나만 삭제</Button>
+            </>
+          )}
+        </Actions>
+      )}
+    </div>
+  );
+}
+
+// ===== NetworkBanner.tsx =====
+function NetworkBanner() {
+  const { isOnline, syncStatus } = useNetwork();
+  
+  if (isOnline && syncStatus === 'idle') return null;
+  
+  return (
+    <div className="network-banner">
+      {!isOnline && <span>⚠️ 오프라인 상태입니다</span>}
+      {syncStatus === 'syncing' && <span>🔄 동기화 중...</span>}
+      {syncStatus === 'error' && <span>❌ 연결 오류 (재시도 중)</span>}
+    </div>
+  );
+}
+```
+
+---
+
+### Reducer 로직 요약
+
+**ActiveRoomReducer 핵심 로직:**
+
+1. **ENTER_ROOM**: 상태 초기화, roomId 설정
+2. **SNAPSHOT_SUCCESS**: messages, participants 설정, pollingStatus = 'live'
+3. **MESSAGE_SEND_REQUEST**: pendingMessages에 추가
+4. **POLLING_EVENT_RECEIVED**:
+   - 각 이벤트 타입별 처리 (message_created, message_updated 등)
+   - client_message_id 매칭으로 pendingMessages 제거
+   - messages 배열 업데이트
+   - hasMore = true면 pollingStatus = 'catchup'
+5. **LOAD_HISTORY_SUCCESS**: messages 배열 앞에 추가 (prepend)
+6. **MESSAGE_LIKE_TOGGLE**: Optimistic으로 like_count 증감, likedMessageIds 토글
+7. **MESSAGE_DELETE_LOCAL**: hiddenMessageIds에 추가
+
+**NetworkReducer 핵심 로직:**
+
+1. **STATUS_CHANGE**: isOnline 업데이트, 온라인 전환 시 retryCount 초기화
+2. **SYNC_ATTEMPT**: syncStatus = 'syncing', lastSyncAttempt 업데이트
+3. **SYNC_SUCCESS**: retryCount = 0, backoffDelay = 100, syncStatus = 'idle'
+4. **SYNC_FAILURE**: retryCount++, backoffDelay *= 2 (최대 30초)
+
+---
+
+### 메모리 관리 전략
+
+```typescript
+/**
+ * 메시지 개수 제한
+ * - 최대 500개까지만 메모리에 유지
+ * - 스크롤 상단으로 가면 과거 메시지 로드
+ * - 오래된 메시지는 자동 제거
+ */
+const MAX_MESSAGES_IN_MEMORY = 500;
+
+// Reducer 내부
+if (state.messages.length > MAX_MESSAGES_IN_MEMORY) {
+  // 가장 오래된 메시지 제거 (앞쪽 100개)
+  state.messages = state.messages.slice(100);
+}
+
+/**
+ * PendingMessages 타임아웃
+ * - 30초 이상 pending 상태면 자동으로 error로 전환
+ */
+const PENDING_TIMEOUT = 30000;
+
+// 타이머 설정
+setTimeout(() => {
+  if (pendingMessages.has(clientId)) {
+    dispatch({
+      type: 'MESSAGE_SEND_FAILURE',
+      payload: { clientId, error: 'Timeout' },
+    });
+  }
+}, PENDING_TIMEOUT);
+```
+
+---
+
 ## ✅ 구현 체크리스트
 
 ### Phase 1: NetworkContext
