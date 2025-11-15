@@ -672,36 +672,106 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
 ## 📊 데이터 흐름
 
-### 채팅방 목록 로드
+### Flux 패턴 아키텍처 (Dashboard - Multi-Store)
+
+```mermaid
+graph TB
+    subgraph "Action Layer"
+        A1[fetchRooms]
+        A2[createRoom]
+        A3[leaveRoom]
+        A4[openModal]
+    end
+    
+    subgraph "Dispatcher Layer"
+        D[dispatch]
+    end
+    
+    subgraph "Store Layer"
+        S1[RoomListReducer]
+        S2[UIReducer]
+    end
+    
+    subgraph "View Layer"
+        V1[RoomList]
+        V2[CreateModal]
+    end
+    
+    A1 --> D
+    A2 --> D
+    A3 --> D
+    A4 --> D
+    
+    D --> S1
+    D --> S2
+    
+    S1 --> V1
+    S2 --> V2
+    
+    V1 --> A1
+    V1 --> A2
+    V1 --> A3
+    V2 --> A4
+    
+    style A1 fill:#e1f5ff
+    style A2 fill:#e1f5ff
+    style A3 fill:#e1f5ff
+    style A4 fill:#e1f5ff
+    style D fill:#fff4e1
+    style S1 fill:#e8f5e9
+    style S2 fill:#e8f5e9
+    style V1 fill:#f3e5f5
+    style V2 fill:#f3e5f5
+```
+
+**Multi-Store 패턴:**
+- **RoomListStore**: 채팅방 데이터 관리
+- **UIStore**: 모달/Toast UI 상태 관리
+- 각 Store는 독립적으로 동작하며 필요 시 상호 참조
+
+---
+
+### 채팅방 목록 로드 (Sequence Diagram)
 
 ```mermaid
 sequenceDiagram
     participant Dashboard
     participant RoomListContext
+    participant Dispatcher
+    participant RoomListReducer
     participant API
-    participant Reducer
     
     Dashboard->>RoomListContext: fetchRooms()
-    RoomListContext->>Reducer: dispatch('FETCH_ROOMS_REQUEST')
-    Reducer->>RoomListContext: status: 'loading'
+    
+    Note over RoomListContext: Action Creator
+    RoomListContext->>Dispatcher: dispatch({type: 'FETCH_ROOMS_REQUEST'})
+    Dispatcher->>RoomListReducer: roomListReducer(state, action)
+    RoomListReducer-->>RoomListContext: newState {status: 'loading'}
     
     RoomListContext->>API: GET /api/rooms
     API-->>RoomListContext: {rooms: Room[]}
     
-    RoomListContext->>Reducer: dispatch('FETCH_ROOMS_SUCCESS')
-    Reducer->>RoomListContext: rooms: Room[], status: 'loaded'
+    Note over RoomListContext: Action Creator
+    RoomListContext->>Dispatcher: dispatch({type: 'FETCH_ROOMS_SUCCESS', payload})
+    Dispatcher->>RoomListReducer: roomListReducer(state, action)
+    RoomListReducer-->>RoomListContext: newState {rooms, status: 'loaded'}
     
-    RoomListContext->>Dashboard: sortedRooms (computed)
+    Note over RoomListContext: Computed Property
+    RoomListContext->>Dashboard: sortedRooms = useMemo(() => sort(rooms))
 ```
 
-### 방 생성 플로우
+---
+
+### 방 생성 플로우 (Multi-Store 협력)
 
 ```mermaid
 sequenceDiagram
     participant User
     participant CreateRoomModal
     participant UIContext
+    participant UIReducer
     participant RoomListContext
+    participant RoomListReducer
     participant API
     participant Router
     
@@ -711,12 +781,43 @@ sequenceDiagram
     RoomListContext->>API: POST /api/rooms
     API-->>RoomListContext: {room: Room}
     
-    RoomListContext->>Reducer: dispatch('CREATE_ROOM_SUCCESS')
-    Reducer->>RoomListContext: rooms: [newRoom, ...existingRooms]
+    Note over RoomListContext: RoomListStore 업데이트
+    RoomListContext->>RoomListReducer: dispatch('CREATE_ROOM_SUCCESS')
+    RoomListReducer-->>RoomListContext: rooms: [newRoom, ...existing]
     
     RoomListContext->>CreateRoomModal: return room
+    
+    Note over CreateRoomModal: UIStore 업데이트
     CreateRoomModal->>UIContext: closeModal('createRoom')
+    UIContext->>UIReducer: dispatch('CLOSE_MODAL')
+    UIReducer-->>UIContext: modals.createRoom = false
+    
     CreateRoomModal->>Router: navigate to /chat/{roomId}
+```
+
+---
+
+### RoomListStore 상태 전이
+
+```mermaid
+stateDiagram-v2
+    [*] --> idle
+    idle --> loading: FETCH_ROOMS_REQUEST
+    loading --> loaded: FETCH_ROOMS_SUCCESS
+    loading --> error: FETCH_ROOMS_FAILURE
+    
+    loaded --> loaded: CREATE_ROOM_SUCCESS<br/>(prepend new room)
+    loaded --> loaded: LEAVE_ROOM_SUCCESS<br/>(filter out room)
+    loaded --> loaded: UPDATE_LAST_MESSAGE<br/>(update & re-sort)
+    loaded --> loaded: INCREMENT_UNREAD<br/>(+1 unread)
+    loaded --> loaded: RESET_UNREAD<br/>(0 unread)
+    
+    error --> loading: 재시도
+    
+    note right of loaded
+        computed: sortedRooms
+        = sort by updated_at DESC
+    end note
 ```
 
 ---

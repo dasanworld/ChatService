@@ -450,7 +450,30 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
 ## 📊 데이터 흐름
 
-### 회원가입 플로우
+### Flux 패턴 아키텍처
+
+```mermaid
+graph LR
+    A[Action Creator<br/>signup, login] --> B[Dispatcher<br/>dispatch]
+    B --> C[Store<br/>AuthReducer]
+    C --> D[View<br/>SignupForm]
+    D --> A
+    
+    style A fill:#e1f5ff
+    style B fill:#fff4e1
+    style C fill:#e8f5e9
+    style D fill:#f3e5f5
+```
+
+**Flux 흐름 설명:**
+1. **Action Creator** (signup, login): 사용자 액션을 Action 객체로 변환
+2. **Dispatcher** (dispatch): Action을 Store로 전달
+3. **Store** (AuthReducer): 상태 업데이트 로직 실행
+4. **View** (SignupForm): 새 상태를 구독하고 UI 렌더링
+
+---
+
+### 회원가입 플로우 (Sequence Diagram)
 
 ```mermaid
 sequenceDiagram
@@ -458,25 +481,59 @@ sequenceDiagram
     participant SignupForm
     participant useSignup
     participant AuthContext
+    participant Dispatcher
+    participant AuthReducer
     participant API
-    participant Reducer
     
     User->>SignupForm: 폼 제출
     SignupForm->>useSignup: handleSignup(data)
     useSignup->>AuthContext: signup(email, password, nickname)
     
-    AuthContext->>Reducer: dispatch('AUTH_REQUEST')
-    Reducer->>AuthContext: status: 'loading'
+    Note over AuthContext: Action Creator
+    AuthContext->>Dispatcher: dispatch({type: 'AUTH_REQUEST'})
+    Dispatcher->>AuthReducer: authReducer(state, action)
+    AuthReducer-->>AuthContext: newState {status: 'loading'}
     AuthContext->>SignupForm: isLoading: true
     
     AuthContext->>API: POST /api/auth/signup
     API-->>AuthContext: {userId, email, nickname, session}
     
-    AuthContext->>Reducer: dispatch('SIGNUP_SUCCESS', payload)
-    Reducer->>AuthContext: user: User, session: Session, status: 'authenticated'
+    Note over AuthContext: Action Creator
+    AuthContext->>Dispatcher: dispatch({type: 'SIGNUP_SUCCESS', payload})
+    Dispatcher->>AuthReducer: authReducer(state, action)
+    AuthReducer-->>AuthContext: newState {user, session, authenticated}
     
     AuthContext->>useSignup: success
     useSignup->>Router: redirect to /dashboard or /invite/{token}
+```
+
+---
+
+### Action → Store → View 상태 변화
+
+```mermaid
+stateDiagram-v2
+    [*] --> idle: 초기 상태
+    idle --> loading: AUTH_REQUEST Action
+    loading --> authenticated: SIGNUP_SUCCESS Action
+    loading --> error: AUTH_FAILURE Action
+    authenticated --> unauthenticated: LOGOUT Action
+    error --> loading: 재시도
+    
+    note right of loading
+        Store: {status: 'loading'}
+        View: 로딩 스피너 표시
+    end note
+    
+    note right of authenticated
+        Store: {user, session}
+        View: Dashboard로 리다이렉트
+    end note
+    
+    note right of error
+        Store: {error: message}
+        View: 에러 메시지 표시
+    end note
 ```
 
 ---

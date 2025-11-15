@@ -215,34 +215,141 @@ export default function InvitePage({ params }: InvitePageProps) {
 
 ## 📊 데이터 흐름
 
-### 초대 처리 플로우
+### Flux 패턴 (Invite는 로컬 상태만 사용, Context Store 없음)
+
+```mermaid
+graph LR
+    A[useInvite Hook<br/>로컬 useState] --> B[InvitePage View]
+    B --> C{인증 상태?}
+    C -->|No| D[AuthStore 읽기<br/>isAuthenticated: false]
+    C -->|Yes| E[AuthStore 읽기<br/>isAuthenticated: true]
+    
+    D --> F[Redirect to /signup]
+    E --> G[API: Join Room]
+    G --> H[Redirect to /chat]
+    
+    style A fill:#e1f5ff
+    style B fill:#f3e5f5
+    style D fill:#e8f5e9
+    style E fill:#e8f5e9
+    
+    note1["📝 Invite는 간단하여<br/>별도 Reducer 불필요<br/>useState로 충분"]:::noteStyle
+    A -.-> note1
+    
+    classDef noteStyle fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+```
+
+**설계 결정:**
+- Invite 페이지는 **일회성 작업**이므로 복잡한 Reducer 불필요
+- `useState`로 로컬 상태 관리
+- AuthContext는 **읽기 전용**으로만 사용
+
+---
+
+### 초대 처리 플로우 (Sequence Diagram)
 
 ```mermaid
 sequenceDiagram
     participant User
     participant InvitePage
     participant useInvite
-    participant AuthContext
+    participant AuthStore
     participant API
     participant Router
     
-    User->>InvitePage: 초대 URL 클릭
+    User->>InvitePage: 초대 URL 클릭 (/invite/{token})
     InvitePage->>useInvite: useInvite(token)
     
-    useInvite->>API: GET /api/invites/{token}
-    API-->>useInvite: {valid: true, room: {...}}
+    Note over useInvite: useState로 로컬 상태 관리
+    useInvite->>useInvite: setIsLoading(true)
     
-    useInvite->>AuthContext: isAuthenticated?
+    useInvite->>API: GET /api/invites/{token}
+    API-->>useInvite: {valid: true, room: {...}, inviter: {...}}
+    
+    useInvite->>useInvite: setInviteInfo(data)
+    useInvite->>useInvite: setIsLoading(false)
+    
+    Note over useInvite: AuthStore 읽기 (구독 아님)
+    useInvite->>AuthStore: isAuthenticated?
     
     alt Not Authenticated
-        AuthContext-->>useInvite: false
+        AuthStore-->>useInvite: false
+        Note over useInvite: 로그인 필요
         useInvite->>Router: redirect to /signup?invite={token}
+        Note right of Router: 회원가입/로그인 후<br/>다시 /invite/{token}으로 돌아옴
     else Authenticated
-        AuthContext-->>useInvite: true
-        useInvite->>API: POST /api/rooms/{roomId}/join
+        AuthStore-->>useInvite: true
+        Note over useInvite: 바로 방 참가
+        useInvite->>API: POST /api/rooms/{roomId}/join {invite_token}
         API-->>useInvite: success
         useInvite->>Router: redirect to /chat/{roomId}
     end
+```
+
+---
+
+### 상태 결정 트리
+
+```mermaid
+graph TD
+    A[Invite Token 검증] --> B{유효한 토큰?}
+    
+    B -->|No| C[에러 화면]
+    B -->|Yes| D{인증됨?}
+    
+    D -->|No| E[/signup?invite=token]
+    D -->|Yes| F[방 참가 API]
+    
+    F --> G{참가 성공?}
+    G -->|Yes| H[/chat/roomId]
+    G -->|No| I[에러 Toast]
+    
+    E --> J[회원가입/로그인]
+    J --> K[/invite/token 재방문]
+    K --> D
+    
+    style A fill:#e1f5ff
+    style C fill:#ffebee
+    style E fill:#fff3e0
+    style H fill:#e8f5e9
+    style I fill:#ffebee
+```
+
+---
+
+### useInvite Hook 상태 관리 (로컬 상태)
+
+```mermaid
+stateDiagram-v2
+    [*] --> loading: useEffect 시작
+    loading --> loaded: API 성공
+    loading --> error: API 실패
+    
+    loaded --> checkingAuth: 초대 정보 확인
+    
+    checkingAuth --> redirectToSignup: isAuthenticated = false
+    checkingAuth --> joiningRoom: isAuthenticated = true
+    
+    joiningRoom --> redirectToChat: 참가 성공
+    joiningRoom --> error: 참가 실패
+    
+    note right of loading
+        useState({isLoading: true})
+    end note
+    
+    note right of loaded
+        useState({
+          inviteInfo: {...},
+          isLoading: false
+        })
+    end note
+    
+    note right of error
+        useState({
+          error: message,
+          isLoading: false
+        })
+    end note
 ```
 
 ---

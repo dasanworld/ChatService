@@ -602,57 +602,211 @@ export function useLongPolling(
 
 ## 📊 주요 데이터 흐름
 
+### Flux 패턴 아키텍처 (Chat Room - Multi-Store + Long Polling)
+
+```mermaid
+graph TB
+    subgraph "Action Layer"
+        A1[sendMessage]
+        A2[toggleLike]
+        A3[deleteMessage]
+        A4[Long Polling Events]
+    end
+    
+    subgraph "Dispatcher Layer"
+        D1[ActiveRoom Dispatcher]
+        D2[RoomList Dispatcher]
+        D3[Network Dispatcher]
+    end
+    
+    subgraph "Store Layer"
+        S1[ActiveRoomReducer]
+        S2[RoomListReducer]
+        S3[NetworkReducer]
+    end
+    
+    subgraph "View Layer"
+        V1[MessageList]
+        V2[MessageInput]
+        V3[NetworkBanner]
+    end
+    
+    A1 --> D1
+    A2 --> D1
+    A3 --> D1
+    A4 --> D1
+    A4 --> D2
+    A4 --> D3
+    
+    D1 --> S1
+    D2 --> S2
+    D3 --> S3
+    
+    S1 --> V1
+    S1 --> V2
+    S3 --> V3
+    
+    V2 --> A1
+    V1 --> A2
+    V1 --> A3
+    
+    style A1 fill:#e1f5ff
+    style A2 fill:#e1f5ff
+    style A3 fill:#e1f5ff
+    style A4 fill:#ffebee
+    style D1 fill:#fff4e1
+    style D2 fill:#fff4e1
+    style D3 fill:#fff4e1
+    style S1 fill:#e8f5e9
+    style S2 fill:#e8f5e9
+    style S3 fill:#e8f5e9
+```
+
+**Multi-Store 협력:**
+- **ActiveRoomStore**: 현재 방 메시지, 참여자
+- **RoomListStore**: 목록의 lastMessage, unreadCount 업데이트
+- **NetworkStore**: 재연결, exponential backoff
+- **Long Polling**: 모든 Store에 이벤트 전파
+
+---
+
 ### 1. 방 입장 및 Snapshot 로드
 
 ```mermaid
 sequenceDiagram
     participant ChatPage
     participant ActiveRoomContext
+    participant Dispatcher
+    participant ActiveRoomReducer
     participant API
-    participant Reducer
-    participant LongPolling
+    participant useLongPolling
     
     ChatPage->>ActiveRoomContext: enterRoom(roomId)
-    ActiveRoomContext->>Reducer: dispatch('ENTER_ROOM')
+    
+    Note over ActiveRoomContext: Action Creator
+    ActiveRoomContext->>Dispatcher: dispatch({type: 'ENTER_ROOM', roomId})
+    Dispatcher->>ActiveRoomReducer: activeRoomReducer(state, action)
+    ActiveRoomReducer-->>ActiveRoomContext: newState {roomId, status: 'loading'}
     
     ActiveRoomContext->>API: GET /api/rooms/{roomId}/snapshot
     API-->>ActiveRoomContext: {room, messages, participants, last_version}
     
-    ActiveRoomContext->>Reducer: dispatch('SNAPSHOT_SUCCESS')
-    Reducer->>ActiveRoomContext: pollingStatus: 'live'
+    Note over ActiveRoomContext: Action Creator
+    ActiveRoomContext->>Dispatcher: dispatch({type: 'SNAPSHOT_SUCCESS', payload})
+    Dispatcher->>ActiveRoomReducer: activeRoomReducer(state, action)
+    ActiveRoomReducer-->>ActiveRoomContext: newState {messages, pollingStatus: 'live'}
     
-    ActiveRoomContext->>LongPolling: Start polling (useEffect)
+    Note over ActiveRoomContext: useEffect dependency change
+    ActiveRoomContext->>useLongPolling: Start polling (roomId changed)
+    useLongPolling->>API: GET /api/rooms/{roomId}/updates?since_version=X
 ```
 
-### 2. 메시지 전송 (Optimistic UI)
+---
+
+### 2. 메시지 전송 (Optimistic UI with Flux)
 
 ```mermaid
 sequenceDiagram
     participant User
     participant MessageInput
     participant ActiveRoomContext
-    participant Reducer
+    participant Dispatcher
+    participant ActiveRoomReducer
     participant API
-    participant LongPolling
+    participant useLongPolling
     
     User->>MessageInput: 메시지 입력 후 전송
     MessageInput->>ActiveRoomContext: sendMessage(content)
     
     Note over ActiveRoomContext: clientId = uuid()
-    ActiveRoomContext->>Reducer: dispatch('MESSAGE_SEND_REQUEST', clientId)
-    Reducer->>MessageInput: pendingMessages.set(clientId)
-    MessageInput->>User: "전송 중..." 표시
+    Note over ActiveRoomContext: Action Creator (Optimistic)
+    ActiveRoomContext->>Dispatcher: dispatch({type: 'MESSAGE_SEND_REQUEST', clientId})
+    Dispatcher->>ActiveRoomReducer: activeRoomReducer(state, action)
     
-    ActiveRoomContext->>API: POST /api/rooms/{roomId}/messages
+    Note over ActiveRoomReducer: Optimistic Update
+    ActiveRoomReducer->>ActiveRoomReducer: pendingMessages.set(clientId, {...})
+    ActiveRoomReducer-->>MessageInput: newState {pendingMessages}
+    MessageInput->>User: "전송 중..." 표시 (pending message)
     
-    Note over LongPolling: Long Polling 수신
-    LongPolling->>API: GET /api/rooms/{roomId}/updates
-    API-->>LongPolling: {events: [message_created]}
+    ActiveRoomContext->>API: POST /api/rooms/{roomId}/messages {client_message_id}
     
-    LongPolling->>Reducer: dispatch('POLLING_EVENT_RECEIVED')
-    Reducer->>Reducer: pendingMessages.delete(clientId)
-    Reducer->>Reducer: messages.push(serverMessage)
-    Reducer->>MessageInput: Pending 제거, 실제 메시지 표시
+    Note over useLongPolling: Long Polling receives event
+    useLongPolling->>API: GET /api/rooms/{roomId}/updates
+    API-->>useLongPolling: {events: [{type: 'message_created', payload: {...}}]}
+    
+    Note over useLongPolling: Action Creator
+    useLongPolling->>Dispatcher: dispatch({type: 'POLLING_EVENT_RECEIVED', events})
+    Dispatcher->>ActiveRoomReducer: activeRoomReducer(state, action)
+    
+    Note over ActiveRoomReducer: Match & Replace
+    ActiveRoomReducer->>ActiveRoomReducer: if (msg.client_message_id === clientId)
+    ActiveRoomReducer->>ActiveRoomReducer: pendingMessages.delete(clientId)
+    ActiveRoomReducer->>ActiveRoomReducer: messages.push(serverMessage)
+    ActiveRoomReducer-->>MessageInput: newState {messages, pendingMessages}
+    
+    MessageInput->>User: Pending 제거, 실제 메시지 표시
+```
+
+---
+
+### 3. Long Polling 상태 전이 (Catchup Mode)
+
+```mermaid
+stateDiagram-v2
+    [*] --> idle: 방 입장 전
+    idle --> live: SNAPSHOT_SUCCESS<br/>(pollingStatus: 'live')
+    
+    live --> live: POLLING_EVENT_RECEIVED<br/>(has_more: false)
+    live --> catchup: POLLING_EVENT_RECEIVED<br/>(has_more: true)
+    
+    catchup --> catchup: POLLING_EVENT_RECEIVED<br/>(has_more: true)<br/>빠른 재요청 (100ms)
+    catchup --> live: POLLING_EVENT_RECEIVED<br/>(has_more: false)
+    
+    live --> error: Network Failure
+    catchup --> error: Network Failure
+    error --> catchup: Reconnect<br/>(exponential backoff)
+    
+    note right of live
+        일반 모드
+        타임아웃: 60초
+        limit: 50개
+    end note
+    
+    note right of catchup
+        따라잡기 모드
+        타임아웃: 10초
+        limit: 100개
+        빠른 재요청
+    end note
+```
+
+---
+
+### 4. Multi-Store 이벤트 전파
+
+```mermaid
+graph TB
+    A[Long Polling<br/>message_created 이벤트] --> B{현재 방?}
+    
+    B -->|예| C[ActiveRoomStore]
+    B -->|아니오| D[RoomListStore]
+    
+    C --> C1[messages.push]
+    C --> C2[pendingMessages 확인]
+    
+    D --> D1[updateLastMessage]
+    D --> D2[incrementUnread]
+    
+    C1 --> E[View: MessageList 렌더링]
+    D1 --> F[View: RoomList 정렬]
+    D2 --> G[View: Badge 표시]
+    
+    style A fill:#ffebee
+    style C fill:#e8f5e9
+    style D fill:#e8f5e9
+    style E fill:#f3e5f5
+    style F fill:#f3e5f5
+    style G fill:#f3e5f5
 ```
 
 ---

@@ -175,7 +175,29 @@ export const LoginForm = () => {
 
 ## 📊 데이터 흐름
 
-### 로그인 플로우
+### Flux 패턴 아키텍처 (Login은 Signup과 동일한 AuthContext 사용)
+
+```mermaid
+graph LR
+    A[Action Creator<br/>login] --> B[Dispatcher<br/>dispatch]
+    B --> C[Store<br/>AuthReducer<br/>공유됨]
+    C --> D[View<br/>LoginForm]
+    D --> A
+    
+    style A fill:#e1f5ff
+    style B fill:#fff4e1
+    style C fill:#e8f5e9
+    style D fill:#f3e5f5
+    
+    note1["🔄 Signup과 동일한<br/>AuthReducer 공유"]:::noteStyle
+    C -.-> note1
+    
+    classDef noteStyle fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+```
+
+---
+
+### 로그인 플로우 (Sequence Diagram)
 
 ```mermaid
 sequenceDiagram
@@ -183,25 +205,56 @@ sequenceDiagram
     participant LoginForm
     participant useLogin
     participant AuthContext
+    participant Dispatcher
+    participant AuthReducer
     participant API
-    participant Reducer
+    participant Router
     
     User->>LoginForm: 폼 제출
     LoginForm->>useLogin: handleLogin(data)
     useLogin->>AuthContext: login(email, password)
     
-    AuthContext->>Reducer: dispatch('AUTH_REQUEST')
-    Reducer->>AuthContext: status: 'loading'
+    Note over AuthContext: Action Creator
+    AuthContext->>Dispatcher: dispatch({type: 'AUTH_REQUEST'})
+    Dispatcher->>AuthReducer: authReducer(state, action)
+    AuthReducer-->>AuthContext: newState {status: 'loading'}
     AuthContext->>LoginForm: isLoading: true
     
     AuthContext->>API: POST /api/auth/login
     API-->>AuthContext: {userId, email, session}
     
-    AuthContext->>Reducer: dispatch('LOGIN_SUCCESS', payload)
-    Reducer->>AuthContext: user: User, session: Session, status: 'authenticated'
+    Note over AuthContext: Action Creator
+    AuthContext->>Dispatcher: dispatch({type: 'LOGIN_SUCCESS', payload})
+    Dispatcher->>AuthReducer: authReducer(state, action)
+    AuthReducer-->>AuthContext: newState {user, session, authenticated}
     
     AuthContext->>useLogin: success
-    useLogin->>Router: redirect based on query params
+    
+    alt 초대 토큰 존재
+        useLogin->>Router: redirect to /invite/{token}
+    else redirectedFrom 존재
+        useLogin->>Router: redirect to {redirectedFrom}
+    else 기본
+        useLogin->>Router: redirect to /dashboard
+    end
+```
+
+---
+
+### 리다이렉션 결정 흐름
+
+```mermaid
+graph TD
+    A[LOGIN_SUCCESS Action] --> B{초대 토큰?}
+    B -->|있음| C[/invite/token]
+    B -->|없음| D{redirectedFrom?}
+    D -->|있음| E[원래 페이지]
+    D -->|없음| F[/dashboard]
+    
+    style A fill:#e8f5e9
+    style C fill:#fff3e0
+    style E fill:#fff3e0
+    style F fill:#fff3e0
 ```
 
 ---
