@@ -822,6 +822,706 @@ stateDiagram-v2
 
 ---
 
+## 🏛️ Context 아키텍처 상세 설계
+
+### RoomListContext + UIContext 데이터 흐름
+
+```mermaid
+graph TB
+    subgraph "RoomListProvider"
+        R1[RoomListState<br/>rooms, selectedRoomId, status]
+        R2[roomListReducer]
+        R3[Action Creators<br/>fetchRooms, createRoom, leaveRoom]
+    end
+    
+    subgraph "UIProvider"
+        U1[UIState<br/>modals, toasts, contextMenu]
+        U2[uiReducer]
+        U3[Action Creators<br/>openModal, showToast]
+    end
+    
+    subgraph "Data Sources"
+        D1[API: GET /api/rooms]
+        D2[API: POST /api/rooms]
+        D3[API: POST /api/rooms/:id/leave]
+    end
+    
+    subgraph "Child Components"
+        C1[RoomList]
+        C2[RoomItem]
+        C3[CreateRoomModal]
+        C4[EmptyState]
+    end
+    
+    R3 -->|dispatch| R2
+    R2 -->|update| R1
+    U3 -->|dispatch| U2
+    U2 -->|update| U1
+    
+    R3 -->|fetch| D1
+    R3 -->|fetch| D2
+    R3 -->|fetch| D3
+    
+    R1 -->|subscribe| C1
+    R1 -->|subscribe| C2
+    R1 -->|subscribe| C4
+    U1 -->|subscribe| C3
+    
+    C2 -->|call| R3
+    C2 -->|call| U3
+    C3 -->|call| R3
+    C3 -->|call| U3
+    
+    style R1 fill:#e8f5e9
+    style U1 fill:#e8f5e9
+    style R2 fill:#fff4e1
+    style U2 fill:#fff4e1
+    style R3 fill:#e1f5ff
+    style U3 fill:#e1f5ff
+```
+
+---
+
+### RoomListState 인터페이스 설계
+
+```typescript
+/**
+ * RoomListContext의 중앙 상태
+ */
+interface RoomListState {
+  // 채팅방 목록
+  rooms: Room[];
+  
+  // 선택된 채팅방 ID (현재 보고 있는 방)
+  selectedRoomId: string | null;
+  
+  // 로딩/에러 상태
+  status: 'idle' | 'loading' | 'loaded' | 'error';
+  error: string | null;
+  
+  // 추가: 마지막 fetch 시간 (캐시 유효성 판단)
+  lastFetchedAt: string | null;
+  
+  // 추가: 페이지네이션 (무한 스크롤 대비)
+  hasMore: boolean;
+  cursor: string | null;
+}
+
+/**
+ * Room 엔티티
+ */
+interface Room {
+  id: string;
+  name: string;
+  
+  // 마지막 메시지 정보
+  lastMessage: {
+    content: string;
+    created_at: string;
+    sender_nickname: string;
+  } | null;
+  
+  // 안읽은 메시지 수
+  unreadCount: number;
+  
+  // 참여자 수
+  participantCount: number;
+  
+  // 타임스탬프
+  created_at: string;
+  updated_at: string;
+  
+  // 추가: 방 메타데이터
+  creator_id?: string;
+  is_archived?: boolean;
+}
+```
+
+---
+
+### RoomListAction 인터페이스 설계
+
+```typescript
+/**
+ * RoomList Reducer Actions
+ */
+type RoomListAction =
+  // 방 목록 로드
+  | {
+      type: 'FETCH_ROOMS_REQUEST';
+    }
+  | {
+      type: 'FETCH_ROOMS_SUCCESS';
+      payload: {
+        rooms: Room[];
+        hasMore: boolean;
+        cursor: string | null;
+      };
+    }
+  | {
+      type: 'FETCH_ROOMS_FAILURE';
+      payload: {
+        error: string;
+      };
+    }
+  
+  // 방 생성
+  | {
+      type: 'CREATE_ROOM_SUCCESS';
+      payload: {
+        room: Room;
+      };
+    }
+  
+  // 방 나가기
+  | {
+      type: 'LEAVE_ROOM_SUCCESS';
+      payload: {
+        roomId: string;
+      };
+    }
+  
+  // 방 선택
+  | {
+      type: 'SELECT_ROOM';
+      payload: {
+        roomId: string | null;
+      };
+    }
+  
+  // 마지막 메시지 업데이트 (ActiveRoomContext에서 호출)
+  | {
+      type: 'UPDATE_LAST_MESSAGE';
+      payload: {
+        roomId: string;
+        message: {
+          content: string;
+          created_at: string;
+          sender_nickname: string;
+        };
+      };
+    }
+  
+  // 안읽은 메시지 증가 (Long Polling에서 호출)
+  | {
+      type: 'INCREMENT_UNREAD';
+      payload: {
+        roomId: string;
+        count?: number;  // default: 1
+      };
+    }
+  
+  // 안읽은 메시지 초기화 (방 입장 시)
+  | {
+      type: 'RESET_UNREAD';
+      payload: {
+        roomId: string;
+      };
+    }
+  
+  // 방 정보 업데이트 (이름 변경 등)
+  | {
+      type: 'UPDATE_ROOM';
+      payload: {
+        roomId: string;
+        updates: Partial<Room>;
+      };
+    };
+```
+
+---
+
+### RoomListContext 노출 인터페이스
+
+```typescript
+/**
+ * useRoomList() 훅이 반환하는 인터페이스
+ */
+interface RoomListContextValue {
+  // ===== 상태 값 (Read-only) =====
+  
+  /** 전체 채팅방 목록 */
+  rooms: Room[];
+  
+  /** 선택된 채팅방 ID */
+  selectedRoomId: string | null;
+  
+  /** 로딩/에러 상태 */
+  status: RoomListState['status'];
+  error: string | null;
+  
+  /** 페이지네이션 */
+  hasMore: boolean;
+  
+  
+  // ===== 계산된 값 (Derived State) =====
+  
+  /** 최신 활동순 정렬된 방 목록 */
+  sortedRooms: Room[];
+  // computed: rooms.sort((a, b) => b.updated_at - a.updated_at)
+  
+  /** 전체 안읽은 메시지 수 */
+  totalUnreadCount: number;
+  // computed: rooms.reduce((sum, room) => sum + room.unreadCount, 0)
+  
+  /** 선택된 방 객체 */
+  selectedRoom: Room | null;
+  // computed: rooms.find(r => r.id === selectedRoomId) ?? null
+  
+  /** 로딩 중 여부 */
+  isLoading: boolean;
+  // computed: status === 'loading'
+  
+  /** Empty State 여부 */
+  isEmpty: boolean;
+  // computed: status === 'loaded' && rooms.length === 0
+  
+  
+  // ===== Action Creator 함수 =====
+  
+  /**
+   * 채팅방 목록 불러오기
+   * @param refresh - true면 캐시 무시하고 새로 로드
+   */
+  fetchRooms: (refresh?: boolean) => Promise<void>;
+  
+  /**
+   * 채팅방 생성
+   * @returns 생성된 방 정보
+   * @throws {Error} 생성 실패 시
+   */
+  createRoom: (name: string) => Promise<Room>;
+  
+  /**
+   * 채팅방 나가기
+   * @throws {Error} 나가기 실패 시
+   */
+  leaveRoom: (roomId: string) => Promise<void>;
+  
+  /**
+   * 채팅방 선택
+   * - null이면 선택 해제
+   */
+  selectRoom: (roomId: string | null) => void;
+  
+  /**
+   * 마지막 메시지 업데이트 (내부 API)
+   * - ActiveRoomContext에서 호출
+   */
+  updateLastMessage: (roomId: string, message: {
+    content: string;
+    created_at: string;
+    sender_nickname: string;
+  }) => void;
+  
+  /**
+   * 안읽은 메시지 증가 (내부 API)
+   * - Long Polling에서 호출
+   */
+  incrementUnread: (roomId: string, count?: number) => void;
+  
+  /**
+   * 안읽은 메시지 초기화 (내부 API)
+   * - 방 입장 시 호출
+   */
+  resetUnread: (roomId: string) => void;
+  
+  /**
+   * 특정 방 정보 다시 불러오기
+   */
+  reloadRoom: (roomId: string) => Promise<void>;
+}
+```
+
+---
+
+### UIState 인터페이스 설계
+
+```typescript
+/**
+ * UIContext의 중앙 상태
+ */
+interface UIState {
+  // 모달 상태
+  modals: {
+    createRoom: boolean;
+    inviteUser: boolean;
+    leaveRoom: boolean;
+    confirmDelete: boolean;
+    roomSettings: boolean;
+  };
+  
+  // Toast 알림
+  toasts: Toast[];
+  
+  // Context Menu (우클릭 메뉴)
+  contextMenu: ContextMenu | null;
+  
+  // 초대 토큰 (임시 저장)
+  inviteToken: string | null;
+}
+
+interface Toast {
+  id: string;              // 고유 ID
+  type: 'success' | 'error' | 'info' | 'warning';
+  message: string;
+  duration: number;        // ms (0이면 수동 닫기)
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
+}
+
+interface ContextMenu {
+  type: 'room' | 'message' | 'user';
+  position: { x: number; y: number };
+  targetId: string;        // 대상 room/message/user ID
+  options: ContextMenuOption[];
+}
+
+interface ContextMenuOption {
+  label: string;
+  icon?: string;
+  onClick: () => void;
+  variant?: 'default' | 'danger';
+  disabled?: boolean;
+}
+```
+
+---
+
+### UIAction 인터페이스 설계
+
+```typescript
+/**
+ * UI Reducer Actions
+ */
+type UIAction =
+  // 모달 제어
+  | {
+      type: 'OPEN_MODAL';
+      payload: {
+        modal: keyof UIState['modals'];
+        data?: any;  // 모달에 전달할 추가 데이터
+      };
+    }
+  | {
+      type: 'CLOSE_MODAL';
+      payload: {
+        modal: keyof UIState['modals'];
+      };
+    }
+  | {
+      type: 'CLOSE_ALL_MODALS';
+    }
+  
+  // Toast 제어
+  | {
+      type: 'SHOW_TOAST';
+      payload: {
+        toast: Toast;
+      };
+    }
+  | {
+      type: 'HIDE_TOAST';
+      payload: {
+        id: string;
+      };
+    }
+  | {
+      type: 'CLEAR_ALL_TOASTS';
+    }
+  
+  // Context Menu 제어
+  | {
+      type: 'OPEN_CONTEXT_MENU';
+      payload: {
+        menu: ContextMenu;
+      };
+    }
+  | {
+      type: 'CLOSE_CONTEXT_MENU';
+    }
+  
+  // 초대 토큰
+  | {
+      type: 'SET_INVITE_TOKEN';
+      payload: {
+        token: string;
+      };
+    }
+  | {
+      type: 'CLEAR_INVITE_TOKEN';
+    };
+```
+
+---
+
+### UIContext 노출 인터페이스
+
+```typescript
+/**
+ * useUI() 훅이 반환하는 인터페이스
+ */
+interface UIContextValue {
+  // ===== 상태 값 (Read-only) =====
+  
+  modals: UIState['modals'];
+  toasts: Toast[];
+  contextMenu: ContextMenu | null;
+  inviteToken: string | null;
+  
+  
+  // ===== 계산된 값 =====
+  
+  /** 특정 모달이 열려있는지 확인 */
+  isModalOpen: (modal: keyof UIState['modals']) => boolean;
+  
+  /** Toast가 있는지 확인 */
+  hasToast: boolean;
+  // computed: toasts.length > 0
+  
+  
+  // ===== Action Creator 함수 =====
+  
+  /**
+   * 모달 열기
+   */
+  openModal: (modal: keyof UIState['modals'], data?: any) => void;
+  
+  /**
+   * 모달 닫기
+   */
+  closeModal: (modal: keyof UIState['modals']) => void;
+  
+  /**
+   * 모든 모달 닫기
+   */
+  closeAllModals: () => void;
+  
+  /**
+   * Toast 알림 표시
+   * @param duration - 0이면 수동 닫기, 기본값: 3000ms
+   */
+  showToast: (
+    type: Toast['type'],
+    message: string,
+    duration?: number,
+    action?: Toast['action']
+  ) => void;
+  
+  /**
+   * Toast 숨기기
+   */
+  hideToast: (id: string) => void;
+  
+  /**
+   * 모든 Toast 제거
+   */
+  clearAllToasts: () => void;
+  
+  /**
+   * Context Menu 열기
+   */
+  openContextMenu: (menu: ContextMenu) => void;
+  
+  /**
+   * Context Menu 닫기
+   */
+  closeContextMenu: () => void;
+  
+  /**
+   * 초대 토큰 설정
+   */
+  setInviteToken: (token: string) => void;
+  
+  /**
+   * 초대 토큰 가져오기 (읽기 후 삭제)
+   */
+  consumeInviteToken: () => string | null;
+}
+```
+
+---
+
+### Context 간 협력 시나리오
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant RoomItem
+    participant RoomListContext
+    participant UIContext
+    participant API
+    
+    Note over User: 우클릭으로 방 나가기
+    User->>RoomItem: contextmenu 이벤트
+    
+    Note over RoomItem: Context Menu 열기
+    RoomItem->>UIContext: openContextMenu({type: 'room', options: [...]})
+    UIContext->>UIContext: dispatch(OPEN_CONTEXT_MENU)
+    
+    User->>UIContext: "방 나가기" 클릭
+    UIContext->>UIContext: closeContextMenu()
+    UIContext->>UIContext: openModal('leaveRoom')
+    
+    User->>UIContext: 모달에서 "확인" 클릭
+    UIContext->>RoomListContext: leaveRoom(roomId)
+    
+    RoomListContext->>API: POST /api/rooms/:id/leave
+    API-->>RoomListContext: success
+    
+    RoomListContext->>RoomListContext: dispatch(LEAVE_ROOM_SUCCESS)
+    
+    RoomListContext->>UIContext: showToast('success', '방을 나갔습니다')
+    UIContext->>UIContext: dispatch(SHOW_TOAST)
+    
+    UIContext->>UIContext: closeModal('leaveRoom')
+```
+
+---
+
+### 하위 컴포넌트 사용 예시
+
+```typescript
+// ===== RoomList.tsx =====
+function RoomList() {
+  const {
+    sortedRooms,         // Computed: 정렬된 방 목록
+    totalUnreadCount,    // Computed: 전체 안읽은 메시지
+    isLoading,           // Computed: 로딩 상태
+    isEmpty,             // Computed: Empty State
+    fetchRooms,          // Action Creator
+  } = useRoomList();
+  
+  const { openModal } = useUI();
+  
+  useEffect(() => {
+    fetchRooms();
+  }, []);
+  
+  if (isLoading) return <Skeleton />;
+  if (isEmpty) return <EmptyState />;
+  
+  return (
+    <div>
+      <Header unreadCount={totalUnreadCount} />
+      {sortedRooms.map(room => (
+        <RoomItem key={room.id} room={room} />
+      ))}
+      <Button onClick={() => openModal('createRoom')}>
+        새 채팅 시작
+      </Button>
+    </div>
+  );
+}
+
+// ===== RoomItem.tsx =====
+function RoomItem({ room }: { room: Room }) {
+  const {
+    selectRoom,
+    leaveRoom,
+    selectedRoomId,
+  } = useRoomList();
+  
+  const {
+    openContextMenu,
+    openModal,
+  } = useUI();
+  
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    openContextMenu({
+      type: 'room',
+      position: { x: e.clientX, y: e.clientY },
+      targetId: room.id,
+      options: [
+        {
+          label: '방 설정',
+          onClick: () => openModal('roomSettings'),
+        },
+        {
+          label: '방 나가기',
+          variant: 'danger',
+          onClick: () => openModal('leaveRoom'),
+        },
+      ],
+    });
+  };
+  
+  const isSelected = selectedRoomId === room.id;
+  
+  return (
+    <div
+      onClick={() => selectRoom(room.id)}
+      onContextMenu={handleContextMenu}
+      className={isSelected ? 'selected' : ''}
+    >
+      <RoomName>{room.name}</RoomName>
+      <LastMessage>{room.lastMessage?.content}</LastMessage>
+      {room.unreadCount > 0 && (
+        <Badge>{room.unreadCount}</Badge>
+      )}
+    </div>
+  );
+}
+
+// ===== CreateRoomModal.tsx =====
+function CreateRoomModal() {
+  const { modals, closeModal } = useUI();
+  const { createRoom } = useRoomList();
+  const router = useRouter();
+  
+  const [name, setName] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  
+  const handleSubmit = async () => {
+    setIsCreating(true);
+    try {
+      const room = await createRoom(name);
+      closeModal('createRoom');
+      router.push(`/chat/${room.id}`);
+    } catch (error) {
+      // 에러 처리
+    } finally {
+      setIsCreating(false);
+    }
+  };
+  
+  if (!modals.createRoom) return null;
+  
+  return (
+    <Modal onClose={() => closeModal('createRoom')}>
+      <Input value={name} onChange={e => setName(e.target.value)} />
+      <Button onClick={handleSubmit} disabled={isCreating}>
+        생성
+      </Button>
+    </Modal>
+  );
+}
+```
+
+---
+
+### Reducer 상태 전이 요약
+
+**RoomListReducer:**
+- `FETCH_ROOMS_REQUEST` → `loading` 상태
+- `FETCH_ROOMS_SUCCESS` → `rooms` 배열 설정, `loaded` 상태
+- `CREATE_ROOM_SUCCESS` → `rooms` 배열 앞에 추가 (prepend)
+- `LEAVE_ROOM_SUCCESS` → `rooms` 배열에서 제거 (filter)
+- `UPDATE_LAST_MESSAGE` → 해당 방의 `lastMessage`, `updated_at` 업데이트
+- `INCREMENT_UNREAD` → 해당 방의 `unreadCount` 증가
+- `RESET_UNREAD` → 해당 방의 `unreadCount` = 0
+
+**UIReducer:**
+- `OPEN_MODAL` → 특정 모달 `true`
+- `CLOSE_MODAL` → 특정 모달 `false`
+- `SHOW_TOAST` → `toasts` 배열에 추가, 타이머 설정
+- `HIDE_TOAST` → `toasts` 배열에서 제거
+
+---
+
 ## ✅ 구현 체크리스트
 
 ### Phase 1: RoomListContext
