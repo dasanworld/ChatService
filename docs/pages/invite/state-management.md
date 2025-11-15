@@ -389,6 +389,401 @@ stateDiagram-v2
 
 ---
 
+## 🏛️ Context 아키텍처 상세 설계
+
+> **Note**: 초대 페이지는 간단한 일회성 검증 로직이므로 Context + useReducer 패턴 대신 **커스텀 훅 (useInvite) + useState**를 사용합니다.
+
+### useInvite Hook 데이터 흐름
+
+```mermaid
+graph TB
+    subgraph "useInvite Hook"
+        H1[inviteInfo State<br/>useState]
+        H2[isLoading State<br/>useState]
+        H3[error State<br/>useState]
+        H4[validateAndJoin Function]
+    end
+    
+    subgraph "Data Sources"
+        D1[API: POST /api/invites/validate]
+        D2[API: POST /api/rooms/:id/join]
+    end
+    
+    subgraph "External Context"
+        E1[AuthContext<br/>user, isAuthenticated]
+    end
+    
+    subgraph "InvitePage Component"
+        C1[InviteStatus<br/>Valid/Invalid/Loading]
+        C2[JoinButton]
+        C3[ErrorMessage]
+        C4[RedirectFlow]
+    end
+    
+    H4 -->|fetch| D1
+    H4 -->|fetch| D2
+    H4 -->|update| H1
+    H4 -->|update| H2
+    H4 -->|update| H3
+    
+    E1 -.->|check| H4
+    H4 -->|on success| C4
+    
+    H1 -->|subscribe| C1
+    H2 -->|subscribe| C1
+    H3 -->|subscribe| C3
+    
+    C2 -->|call| H4
+    
+    style H1 fill:#e8f5e9
+    style H2 fill:#fff9c4
+    style H3 fill:#ffebee
+    style H4 fill:#fff4e1
+```
+
+---
+
+### InviteInfo 인터페이스 설계
+
+```typescript
+/**
+ * 초대 토큰 검증 결과
+ */
+interface InviteInfo {
+  // 방 정보
+  roomId: string;
+  roomName: string;
+  
+  // 초대자 정보
+  inviterName: string;
+  inviterAvatarUrl?: string;
+  
+  // 토큰 상태
+  isValid: boolean;
+  expireAt: string | null;          // null이면 만료 없음
+  
+  // 현재 사용자의 참여 상태
+  isAlreadyMember: boolean;         // 이미 참여 중인 방인지
+  
+  // 기타
+  participantCount: number;
+}
+
+/**
+ * useInvite Hook의 내부 상태
+ */
+interface UseInviteState {
+  inviteInfo: InviteInfo | null;
+  isLoading: boolean;
+  error: string | null;
+  
+  // 추가 플래그
+  isValidating: boolean;            // 토큰 검증 중
+  isJoining: boolean;               // 방 참가 중
+}
+```
+
+---
+
+### useInvite Hook 노출 인터페이스
+
+```typescript
+/**
+ * useInvite 훅의 반환 타입
+ */
+interface UseInviteReturn {
+  // ===== 상태 값 =====
+  
+  inviteInfo: InviteInfo | null;
+  isLoading: boolean;
+  error: string | null;
+  
+  
+  // ===== 계산된 값 =====
+  
+  /**
+   * 참가 가능한 초대인지
+   */
+  canJoin: boolean;
+  // computed: inviteInfo?.isValid && !inviteInfo.isAlreadyMember && !isExpired
+  
+  /**
+   * 만료 여부
+   */
+  isExpired: boolean;
+  // computed: expireAt && new Date(expireAt) < new Date()
+  
+  /**
+   * 이미 참여 중인 방인지
+   */
+  isAlreadyMember: boolean;
+  
+  
+  // ===== Action 함수 =====
+  
+  /**
+   * 토큰 검증 및 자동 참가 시도
+   * 1. AuthContext에서 user 확인
+   * 2. 로그인 상태면: 토큰 검증 → 자동 참가 → 채팅방 이동
+   * 3. 비로그인 상태면: 토큰 검증만 수행 → 로그인 페이지 이동 (redirectedFrom 설정)
+   * 
+   * @throws {Error} 검증 실패 시
+   */
+  validateAndJoin: () => Promise<void>;
+  
+  /**
+   * 수동 참가 시도 (버튼 클릭 시)
+   */
+  joinRoom: () => Promise<void>;
+}
+```
+
+---
+
+### useInvite Hook 구현 인터페이스
+
+```typescript
+/**
+ * useInvite Hook 시그니처
+ */
+function useInvite(token: string): UseInviteReturn {
+  const { user, isAuthenticated } = useAuth();
+  const router = useRouter();
+  
+  const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
+  
+  // 토큰 검증 및 자동 참가
+  const validateAndJoin = useCallback(async () => {
+    setIsValidating(true);
+    try {
+      // 1. 토큰 검증
+      const response = await apiClient.post('/api/invites/validate', { token });
+      const info = response.data;
+      setInviteInfo(info);
+      
+      // 2. 비로그인 상태면 로그인 페이지로
+      if (!isAuthenticated) {
+        router.push(`/login?redirectedFrom=/invite/${token}`);
+        return;
+      }
+      
+      // 3. 이미 참여 중이면 바로 채팅방으로
+      if (info.isAlreadyMember) {
+        router.push(`/chat-room/${info.roomId}`);
+        return;
+      }
+      
+      // 4. 유효한 초대면 자동 참가
+      if (info.isValid && !isExpired) {
+        setIsJoining(true);
+        await apiClient.post(`/api/rooms/${info.roomId}/join`, { token });
+        router.push(`/chat-room/${info.roomId}`);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsValidating(false);
+      setIsJoining(false);
+      setIsLoading(false);
+    }
+  }, [token, isAuthenticated]);
+  
+  // 마운트 시 자동 실행
+  useEffect(() => {
+    validateAndJoin();
+  }, [validateAndJoin]);
+  
+  // ... computed values
+  
+  return {
+    inviteInfo,
+    isLoading,
+    error,
+    canJoin,
+    isExpired,
+    isAlreadyMember,
+    validateAndJoin,
+    joinRoom,
+  };
+}
+```
+
+---
+
+### 초대 흐름 시퀀스 다이어그램
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant InvitePage
+    participant useInvite
+    participant AuthContext
+    participant API
+    participant Router
+    
+    Note over User: URL 접속: /invite/abc123
+    User->>InvitePage: 페이지 로드
+    InvitePage->>useInvite: useInvite(token)
+    
+    Note over useInvite: useEffect(() => validateAndJoin())
+    useInvite->>API: POST /api/invites/validate { token }
+    API-->>useInvite: { roomId, roomName, isValid: true }
+    
+    useInvite->>AuthContext: user, isAuthenticated
+    
+    alt 비로그인 상태
+        AuthContext-->>useInvite: isAuthenticated = false
+        useInvite->>Router: push(/login?redirectedFrom=/invite/abc123)
+        Router-->>User: 로그인 페이지로 이동
+        Note over User: 로그인 후 자동으로 /invite/abc123 복귀
+    else 로그인 상태 & 이미 참여 중
+        AuthContext-->>useInvite: isAuthenticated = true
+        useInvite->>useInvite: inviteInfo.isAlreadyMember = true
+        useInvite->>Router: push(/chat-room/:roomId)
+        Router-->>User: 채팅방으로 바로 이동
+    else 로그인 상태 & 유효한 초대
+        AuthContext-->>useInvite: isAuthenticated = true
+        useInvite->>API: POST /api/rooms/:roomId/join { token }
+        API-->>useInvite: { success: true }
+        useInvite->>Router: push(/chat-room/:roomId)
+        Router-->>User: 채팅방 입장 완료
+    else 만료된 초대
+        useInvite->>useInvite: isExpired = true
+        useInvite-->>InvitePage: error = "만료된 초대입니다"
+        InvitePage-->>User: 에러 메시지 표시
+    end
+```
+
+---
+
+### InvitePage 컴포넌트 사용 예시
+
+```typescript
+// ===== InvitePage.tsx =====
+function InvitePage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = use(params);
+  const {
+    inviteInfo,
+    isLoading,
+    error,
+    canJoin,
+    isExpired,
+    isAlreadyMember,
+    joinRoom,
+  } = useInvite(token);
+  
+  // 로딩 중
+  if (isLoading) {
+    return (
+      <div className="invite-loading">
+        <Spinner />
+        <p>초대 정보를 확인하고 있습니다...</p>
+      </div>
+    );
+  }
+  
+  // 에러 발생
+  if (error) {
+    return (
+      <div className="invite-error">
+        <ErrorIcon />
+        <h2>초대 링크를 확인할 수 없습니다</h2>
+        <p>{error}</p>
+        <Button onClick={() => router.push('/dashboard')}>
+          대시보드로 이동
+        </Button>
+      </div>
+    );
+  }
+  
+  // 만료된 초대
+  if (isExpired) {
+    return (
+      <div className="invite-expired">
+        <WarningIcon />
+        <h2>만료된 초대 링크</h2>
+        <p>이 초대 링크는 {inviteInfo.expireAt}에 만료되었습니다.</p>
+      </div>
+    );
+  }
+  
+  // 이미 참여 중 (자동 이동되므로 보통 보이지 않음)
+  if (isAlreadyMember) {
+    return (
+      <div className="invite-already-member">
+        <CheckIcon />
+        <h2>이미 참여 중인 채팅방입니다</h2>
+        <p>"{inviteInfo.roomName}" 채팅방으로 이동합니다...</p>
+      </div>
+    );
+  }
+  
+  // 정상 초대 (자동 참가되므로 보통 보이지 않음, 에러 시에만 수동 버튼 표시)
+  return (
+    <div className="invite-success">
+      <Avatar src={inviteInfo.inviterAvatarUrl} />
+      <h2>{inviteInfo.inviterName}님의 초대</h2>
+      <Card>
+        <h3>{inviteInfo.roomName}</h3>
+        <p>참여자: {inviteInfo.participantCount}명</p>
+      </Card>
+      {canJoin && (
+        <Button onClick={joinRoom} disabled={isLoading}>
+          {isLoading ? '참가 중...' : '채팅방 참가'}
+        </Button>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+### 상태 전이 요약
+
+**useInvite Hook 상태 흐름:**
+
+```
+[초기]
+  isLoading = true
+  inviteInfo = null
+  ↓
+[검증 요청]
+  POST /api/invites/validate
+  ↓
+[검증 결과]
+  ├─ 비로그인 → 로그인 페이지로 redirect
+  ├─ 이미 참여 → 채팅방으로 redirect
+  ├─ 유효 → 자동 참가 → 채팅방으로 redirect
+  ├─ 만료 → error 표시
+  └─ 무효 → error 표시
+```
+
+---
+
+### 성능 및 보안 고려사항
+
+**보안:**
+- 토큰은 일회용이 아니므로 여러 번 사용 가능 (단, 만료 기한 체크)
+- 서버에서 참가 권한 재확인 필수
+- 이미 참여 중인 사용자는 중복 참가 방지
+
+**UX:**
+- 자동 참가 시도로 클릭 최소화
+- 로그인 후 자동으로 원래 초대 URL로 복귀
+- 에러 발생 시에만 수동 "참가" 버튼 표시
+
+**에러 처리:**
+- 네트워크 에러: "다시 시도" 버튼
+- 토큰 무효: "만료된 링크입니다"
+- 이미 참여 중: 자동으로 채팅방 이동
+
+---
+
 ## ✅ 구현 체크리스트
 
 ### Phase 1: Hook
