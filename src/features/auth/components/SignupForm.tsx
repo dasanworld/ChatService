@@ -8,7 +8,11 @@ import { Label } from '@/components/ui/label';
 import { signupFormSchema, type SignupFormData } from '../schemas/signup';
 import { useSignup } from '../hooks/useSignup';
 
-export const SignupForm = () => {
+type SignupFormProps = {
+  defaultInviteToken?: string;
+};
+
+export const SignupForm = ({ defaultInviteToken }: SignupFormProps) => {
   const { signup, isSubmitting, errorMessage } = useSignup();
   const {
     register,
@@ -19,7 +23,7 @@ export const SignupForm = () => {
   });
 
   const onSubmit = async (data: SignupFormData) => {
-    await signup(data);
+    await signup(data, defaultInviteToken);
   };
 
   return (

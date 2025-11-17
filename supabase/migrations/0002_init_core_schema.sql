@@ -1,103 +1,82 @@
--- Ensures core tables exist with updated_at triggers and RLS disabled during MVP.
+-- Migration: initialize core schema for chat service
+-- Creates profiles, rooms, and room_participants tables
 
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- Enable pgcrypto extension for UUID generation
+create extension if not exists "pgcrypto";
 
-BEGIN;
-
-CREATE SCHEMA IF NOT EXISTS _shared_triggers;
-
-CREATE OR REPLACE FUNCTION _shared_triggers.set_updated_at()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$;
-
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
-  nickname TEXT NOT NULL CHECK (char_length(trim(nickname)) > 0),
-  avatar_url TEXT,
-  created_at timestamptz NOT NULL DEFAULT NOW(),
-  updated_at timestamptz NOT NULL DEFAULT NOW()
+-- Create profiles table
+create table if not exists public.profiles (
+  id uuid primary key references auth.users on delete cascade, -- Supabase Auth user ID
+  email text unique not null,
+  nickname text unique not null,
+  full_name text,
+  avatar_url text,
+  bio text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
-COMMENT ON TABLE public.profiles IS 'Caches Supabase auth user metadata for ChatService.';
-
-CREATE TABLE IF NOT EXISTS public.rooms (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL CHECK (char_length(trim(name)) > 0),
-  created_by UUID NOT NULL REFERENCES public.profiles (id),
-  created_at timestamptz NOT NULL DEFAULT NOW(),
-  updated_at timestamptz NOT NULL DEFAULT NOW()
+-- Create rooms table
+create table if not exists public.rooms (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  description text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
-COMMENT ON TABLE public.rooms IS 'Chat rooms metadata (MVP scope).';
-
-CREATE TABLE IF NOT EXISTS public.room_participants (
-  room_id UUID NOT NULL REFERENCES public.rooms (id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES public.profiles (id) ON DELETE CASCADE,
-  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'moderator', 'owner')),
-  joined_at timestamptz NOT NULL DEFAULT NOW(),
-  created_at timestamptz NOT NULL DEFAULT NOW(),
-  updated_at timestamptz NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (room_id, user_id)
+-- Create room_participants table
+create table if not exists public.room_participants (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references public.rooms on delete cascade,
+  user_id uuid not null references auth.users on delete cascade,
+  role text default 'member', -- member, admin, owner
+  joined_at timestamptz not null default now(),
+  unique(room_id, user_id)
 );
 
-COMMENT ON TABLE public.room_participants IS 'Membership mappings for rooms and notification rights.';
+-- Create updated_at trigger function
+create or replace function public.handle_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
 
-CREATE TABLE IF NOT EXISTS public.messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  room_id UUID NOT NULL REFERENCES public.rooms (id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES public.profiles (id) ON DELETE CASCADE,
-  content TEXT NOT NULL,
-  reply_to_message_id UUID REFERENCES public.messages (id) ON DELETE SET NULL,
-  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at timestamptz NOT NULL DEFAULT NOW(),
-  updated_at timestamptz NOT NULL DEFAULT NOW()
-);
+-- Add triggers to update updated_at
+create trigger handle_profiles_updated_at 
+  before update on public.profiles
+  for each row 
+  execute function public.handle_updated_at();
 
-COMMENT ON TABLE public.messages IS 'Stores room messages for MVP + future extensions.';
+create trigger handle_rooms_updated_at 
+  before update on public.rooms
+  for each row 
+  execute function public.handle_updated_at();
 
-CREATE INDEX IF NOT EXISTS idx_room_participants_user ON public.room_participants (user_id);
-CREATE INDEX IF NOT EXISTS idx_messages_room_created_at ON public.messages (room_id, created_at);
+create trigger handle_room_participants_updated_at 
+  before update on public.room_participants
+  for each row 
+  execute function public.handle_updated_at();
 
--- RLS DISABLE: API uses service_role key during MVP, so RLS stays off until endpoints mature.
+-- Disable RLS for all tables (as per requirements)
 ALTER TABLE IF EXISTS public.profiles DISABLE ROW LEVEL SECURITY;
--- RLS DISABLE: API uses service_role key during MVP, so RLS stays off until endpoints mature.
 ALTER TABLE IF EXISTS public.rooms DISABLE ROW LEVEL SECURITY;
--- RLS DISABLE: API uses service_role key during MVP, so RLS stays off until endpoints mature.
 ALTER TABLE IF EXISTS public.room_participants DISABLE ROW LEVEL SECURITY;
--- RLS DISABLE: API uses service_role key during MVP, so RLS stays off until endpoints mature.
-ALTER TABLE IF EXISTS public.messages DISABLE ROW LEVEL SECURITY;
 
-COMMIT;
+-- Create a trigger function to automatically create a profile when a new user signs up
+create or replace function public.create_profile_on_signup() 
+returns trigger as $$
+begin
+  insert into public.profiles (id, email, nickname)
+  values (new.id, new.email, 'user_' || substring(new.id::text, 1, 8)); -- default nickname
+  return new;
+end;
+$$ language plpgsql;
 
-DO $$
-DECLARE
-  target_table TEXT;
-  trigger_name TEXT;
-BEGIN
-  FOREACH target_table IN ARRAY ARRAY['profiles', 'rooms', 'room_participants', 'messages'] LOOP
-    trigger_name := format('set_updated_at_%s', target_table);
-    IF NOT EXISTS (
-      SELECT 1 FROM pg_trigger WHERE tgname = trigger_name
-    ) THEN
-      EXECUTE format(
-        'CREATE TRIGGER %I
-           BEFORE UPDATE ON public.%I
-           FOR EACH ROW
-           EXECUTE FUNCTION _shared_triggers.set_updated_at();',
-        trigger_name,
-        target_table
-      );
-    END IF;
-  END LOOP;
-EXCEPTION
-  WHEN others THEN
-    RAISE NOTICE 'Failed attaching updated_at triggers: %', SQLERRM;
-    RAISE;
-END
-$$;
+-- Create trigger for auth.users
+create trigger on_auth_user_created 
+  after insert on auth.users
+  for each row 
+  execute function public.create_profile_on_signup();

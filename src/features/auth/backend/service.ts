@@ -8,6 +8,7 @@ export type SignupPayload = {
   email: string;
   password: string;
   nickname: string;
+  inviteToken?: string; // Optional invite token for joining a room
 };
 
 export const createUserProfile = async (
@@ -55,6 +56,7 @@ export const createUserProfile = async (
     .insert({
       id: authData.user.id,
       nickname: payload.nickname,
+      email: payload.email,
     });
 
   if (profileError) {
@@ -62,6 +64,21 @@ export const createUserProfile = async (
     // For now, log the error and return failure
     console.error('Profile creation failed, auth user orphaned:', authData.user.id);
     return failure(500, authErrorCodes.PROFILE_CREATION_FAILED, profileError.message);
+  }
+
+  // 4. If invite token is provided, add user to the room
+  if (payload.inviteToken) {
+    const { error: roomError } = await client
+      .from('room_participants')
+      .insert({
+        room_id: payload.inviteToken,
+        user_id: authData.user.id,
+      });
+
+    if (roomError) {
+      console.error('Failed to add user to room:', roomError);
+      // Note: We don't fail the signup if room join fails - just log it
+    }
   }
 
   return success({

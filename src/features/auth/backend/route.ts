@@ -12,13 +12,14 @@ export const registerAuthRoutes = (app: Hono<AppEnv>) => {
     async (c) => {
       const body = await c.req.json();
       const supabase = c.get('supabase');
-      
+
       const result = await createUserProfile(supabase, {
         email: body.email,
         password: body.password,
         nickname: body.nickname,
+        inviteToken: body.inviteToken, // Pass invite token if provided
       });
-      
+
       return respond(c, result);
     }
   );

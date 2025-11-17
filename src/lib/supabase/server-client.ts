@@ -41,3 +41,8 @@ export const createSupabaseServerClient = async (): Promise<
     }
   );
 };
+
+// Create a function to get the server client
+export const getSupabaseServerClient = async (): Promise<SupabaseClient<Database>> => {
+  return await createSupabaseServerClient();
+};

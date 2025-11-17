@@ -8,6 +8,7 @@ export const SignupRequestSchema = z.object({
     .min(2, 'Nickname must be at least 2 characters')
     .max(20, 'Nickname must be at most 20 characters')
     .regex(/^[a-zA-Z0-9가-힣_]+$/, 'Nickname can only contain letters, numbers, and underscores'),
+  inviteToken: z.string().optional(),
 });
 
 export type SignupRequest = z.infer<typeof SignupRequestSchema>;

@@ -1,20 +1,19 @@
 "use client";
 
 import { useState, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { apiClient, extractApiErrorMessage, isAxiosError } from '@/lib/remote/api-client';
 import { useCurrentUser } from './useCurrentUser';
 import type { SignupFormData } from '../schemas/signup';
 
 export const useSignup = () => {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { refresh } = useCurrentUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const signup = useCallback(
-    async (data: SignupFormData) => {
+    async (data: SignupFormData, inviteToken?: string) => {
       setIsSubmitting(true);
       setErrorMessage(null);
 
@@ -23,15 +22,16 @@ export const useSignup = () => {
           email: data.email,
           password: data.password,
           nickname: data.nickname,
+          inviteToken, // Pass the invite token to the backend
         });
 
         // Refresh user context
         await refresh();
 
-        // Handle invite token if exists
-        const inviteToken = searchParams.get('invite');
+        // Handle invite token if provided
         if (inviteToken) {
-          router.replace(`/invite/${inviteToken}`);
+          // Redirect to the chat room using the invite token
+          router.replace(`/chat/${inviteToken}`);
         } else {
           router.replace('/dashboard');
         }
@@ -48,7 +48,7 @@ export const useSignup = () => {
         setIsSubmitting(false);
       }
     },
-    [refresh, router, searchParams]
+    [refresh, router]
   );
 
   return {
