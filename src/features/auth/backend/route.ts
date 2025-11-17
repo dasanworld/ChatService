@@ -2,8 +2,8 @@ import type { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { respond } from '@/backend/http/response';
 import type { AppEnv } from '@/backend/hono/context';
-import { SignupRequestSchema } from './schema';
-import { createUserProfile } from './service';
+import { SignupRequestSchema, LoginRequestSchema } from './schema';
+import { createUserProfile, authenticateUser } from './service';
 
 export const registerAuthRoutes = (app: Hono<AppEnv>) => {
   app.post(
@@ -18,6 +18,22 @@ export const registerAuthRoutes = (app: Hono<AppEnv>) => {
         password: body.password,
         nickname: body.nickname,
         inviteToken: body.inviteToken, // Pass invite token if provided
+      });
+
+      return respond(c, result);
+    }
+  );
+
+  app.post(
+    '/api/auth/login',
+    zValidator('json', LoginRequestSchema) as any,
+    async (c) => {
+      const body = await c.req.json();
+      const supabase = c.get('supabase');
+
+      const result = await authenticateUser(supabase, {
+        email: body.email,
+        password: body.password,
       });
 
       return respond(c, result);

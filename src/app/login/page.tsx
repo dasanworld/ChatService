@@ -17,9 +17,11 @@ export default function LoginPage({ params }: LoginPageProps) {
   const searchParams = useSearchParams();
   const { isAuthenticated } = useCurrentUser();
 
+  const inviteToken = searchParams.get("invite");
+
   useEffect(() => {
     if (isAuthenticated) {
-      const redirectedFrom = searchParams.get("redirectedFrom") ?? "/";
+      const redirectedFrom = searchParams.get("redirectedFrom") ?? "/dashboard";
       router.replace(redirectedFrom);
     }
   }, [isAuthenticated, router, searchParams]);
@@ -33,16 +35,18 @@ export default function LoginPage({ params }: LoginPageProps) {
       <header className="flex flex-col items-center gap-3 text-center">
         <h1 className="text-3xl font-semibold">로그인</h1>
         <p className="text-slate-500">
-          Supabase 계정으로 로그인하고 보호된 페이지에 접근하세요.
+          {inviteToken
+            ? "초대를 수락하고 채팅을 시작하세요."
+            : "계정으로 로그인하고 채팅을 계속하세요."}
         </p>
       </header>
       <div className="grid w-full gap-8 md:grid-cols-2">
         <div className="rounded-xl border border-slate-200 p-6 shadow-sm">
-          <LoginForm />
+          <LoginForm defaultInviteToken={inviteToken ?? undefined} />
           <p className="mt-4 text-xs text-slate-500">
             계정이 없으신가요?{" "}
             <Link
-              href="/signup"
+              href={inviteToken ? `/signup-invite?invite=${inviteToken}` : "/signup"}
               className="font-medium text-slate-700 underline hover:text-slate-900"
             >
               회원가입

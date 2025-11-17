@@ -2,8 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getSupabaseBrowserClient } from '@/lib/supabase/browser-client';
-import { apiClient } from '@/lib/remote/api-client';
+import { apiClient, extractApiErrorMessage, isAxiosError } from '@/lib/remote/api-client';
 import { useCurrentUser } from './useCurrentUser';
 import type { LoginFormData } from '../schemas/login';
 
@@ -20,33 +19,29 @@ export const useLogin = () => {
       setErrorMessage(null);
 
       try {
-        const supabase = getSupabaseBrowserClient();
-
-        const result = await supabase.auth.signInWithPassword({
+        await apiClient.post('/api/auth/login', {
           email: data.email,
           password: data.password,
         });
 
-        if (result.error) {
-          throw new Error(result.error.message);
-        }
-
         // Refresh user context
         await refresh();
 
-        // Handle invite token if provided
+        // Handle redirect with priority: inviteToken > redirectedFrom > dashboard
         if (inviteToken) {
-          // Redirect to the chat room using the invite token
-          router.replace(`/chat/${inviteToken}`);
+          router.replace(`/invite/${inviteToken}`);
         } else {
-          // Use redirect param from URL if available, otherwise go to dashboard
-          const redirectedFrom = searchParams.get("redirectedFrom") ?? "/dashboard";
-          router.replace(redirectedFrom);
+          const redirectedFrom = searchParams.get('redirectedFrom');
+          if (redirectedFrom) {
+            router.replace(redirectedFrom);
+          } else {
+            router.replace('/dashboard');
+          }
         }
 
         return { ok: true };
       } catch (error) {
-        const message = error instanceof Error ? error.message : '로그인에 실패했습니다';
+        const message = extractApiErrorMessage(error, '로그인에 실패했습니다');
         setErrorMessage(message);
         return { ok: false };
       } finally {

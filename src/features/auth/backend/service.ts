@@ -2,7 +2,7 @@ import type { Database } from '@/lib/supabase/types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { success, failure, type HandlerResult } from '@/backend/http/response';
 import { authErrorCodes, type AuthErrorCode } from './error';
-import type { SignupResponse } from './schema';
+import type { SignupResponse, LoginResponse } from './schema';
 
 export type SignupPayload = {
   email: string;
@@ -85,5 +85,41 @@ export const createUserProfile = async (
     userId: authData.user.id,
     email: authData.user.email ?? payload.email,
     nickname: payload.nickname,
+  });
+};
+
+export type LoginPayload = {
+  email: string;
+  password: string;
+};
+
+export const authenticateUser = async (
+  client: SupabaseClient,
+  payload: LoginPayload,
+): Promise<HandlerResult<LoginResponse, AuthErrorCode, unknown>> => {
+  const { data, error } = await client.auth.signInWithPassword({
+    email: payload.email,
+    password: payload.password,
+  });
+
+  if (error) {
+    if (error.message.includes('Invalid login credentials')) {
+      return failure(401, authErrorCodes.INVALID_CREDENTIALS, 'Invalid email or password');
+    }
+    return failure(500, authErrorCodes.SIGNUP_FAILED, error.message);
+  }
+
+  if (!data.user || !data.session) {
+    return failure(500, authErrorCodes.SIGNUP_FAILED, 'Login failed');
+  }
+
+  return success({
+    userId: data.user.id,
+    email: data.user.email ?? payload.email,
+    session: {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      expiresAt: data.session.expires_at ?? 0,
+    },
   });
 };
