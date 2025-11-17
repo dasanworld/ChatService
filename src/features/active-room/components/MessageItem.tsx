@@ -6,6 +6,7 @@ import { ko } from 'date-fns/locale';
 import { MessageCircle, Heart, Trash2 } from 'lucide-react';
 import { useActiveRoom } from '../context/ActiveRoomContext';
 import { useLikeMessage } from '../hooks/useLikeMessage';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { apiClient, extractApiErrorMessage } from '@/lib/remote/api-client';
 import { ReadReceipt } from '@/features/read-receipt/components/ReadReceipt';
 import { useCurrentUser } from '@/features/auth/hooks/useCurrentUser';
@@ -30,9 +31,13 @@ export const MessageItem = ({
   const { setReplyTarget, hideMessage } = useActiveRoom();
   const { likeMessage, isLiking } = useLikeMessage();
   const { user } = useCurrentUser();
+  const isMobile = useIsMobile();
   const [showActions, setShowActions] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const isMine = user?.id === message.user_id;
+
+  // 모바일에서는 항상 액션 버튼 표시, 데스크탑에서는 hover 시에만 표시
+  const shouldShowActions = isMobile ? !isPending : showActions && !isPending;
 
   const handleReply = () => {
     setReplyTarget(message);
@@ -155,7 +160,7 @@ export const MessageItem = ({
       </div>
 
       {/* Action buttons */}
-      {showActions && !isPending && (
+      {shouldShowActions && (
         <div className="flex gap-1 flex-shrink-0">
           <button
             onClick={handleReply}

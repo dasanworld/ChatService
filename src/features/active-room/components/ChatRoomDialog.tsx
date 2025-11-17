@@ -12,6 +12,7 @@ import { InviteDialog } from '@/features/invite/components/InviteDialog';
 import { useUI } from '@/features/ui/context/UIContext';
 import { useRoomList } from '@/features/room-list/context/RoomListContext';
 import { useCurrentUser } from '@/features/auth/hooks/useCurrentUser';
+import { useWindowSize } from '@/hooks/useWindowSize';
 import {
   Sheet,
   SheetContent,
@@ -27,12 +28,27 @@ export const ChatRoomDialog = () => {
   const { onlineUsers } = usePresence(currentChatRoomId);
   const { rooms } = useRoomList();
   const { user } = useCurrentUser();
+  const windowSize = useWindowSize();
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [width, setWidth] = useState(768); // Default width in pixels
   const isResizingRef = useRef(false);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
+
+  // 모바일/태블릿/데스크탑별 기본 너비 설정
+  useEffect(() => {
+    if (windowSize.width < 768) {
+      // 모바일: 전체 화면 너비 사용
+      setWidth(windowSize.width);
+    } else if (windowSize.width < 1024) {
+      // 태블릿: 화면의 70% 사용
+      setWidth(Math.round(windowSize.width * 0.7));
+    } else {
+      // 데스크탑: 고정 768px
+      setWidth(768);
+    }
+  }, [windowSize.width]);
 
   // Start Long Polling when room is open
   useLongPolling(currentChatRoomId);
@@ -70,12 +86,19 @@ export const ChatRoomDialog = () => {
     }, 200);
   };
 
-  // Resize handlers
+  // Resize handlers - 마우스 + 터치 이벤트 지원
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     isResizingRef.current = true;
     startXRef.current = e.clientX;
     startWidthRef.current = width;
     e.preventDefault();
+  }, [width]);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    isResizingRef.current = true;
+    startXRef.current = e.touches[0].clientX;
+    startWidthRef.current = width;
   }, [width]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -111,6 +134,7 @@ export const ChatRoomDialog = () => {
           <div
             className="absolute left-0 top-0 h-full w-1 cursor-ew-resize hover:bg-blue-500 transition-colors"
             onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
           />
 
           {/* Header */}

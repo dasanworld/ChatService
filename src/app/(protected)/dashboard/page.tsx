@@ -84,7 +84,7 @@ export default function DashboardPage({ params }: DashboardPageProps) {
 
         {/* Room List Section */}
         <section className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
                 내 채팅방
@@ -93,10 +93,10 @@ export default function DashboardPage({ params }: DashboardPageProps) {
                 참여 중인 채팅방 목록입니다.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
               <Button
                 onClick={() => openModal("createRoom")}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
               >
                 <MessageSquarePlus className="h-4 w-4" />
                 <span className="ml-2">새 채팅방</span>
@@ -104,6 +104,7 @@ export default function DashboardPage({ params }: DashboardPageProps) {
               <Button
                 onClick={() => openModal("joinRoom")}
                 variant="outline"
+                className="w-full sm:w-auto"
               >
                 <UserPlus className="h-4 w-4" />
                 <span className="ml-2">채팅방 참여하기</span>

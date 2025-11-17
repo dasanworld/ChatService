@@ -28,7 +28,7 @@ export const RoomListItem = ({ room }: RoomListItemProps) => {
       onClick={handleRoomClick}
       className="block cursor-pointer rounded-lg border border-slate-200 p-4 transition-all hover:border-slate-300 hover:shadow-md"
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         {/* Room info */}
         <div className="flex-1 space-y-2">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
@@ -47,17 +47,15 @@ export const RoomListItem = ({ room }: RoomListItemProps) => {
         </div>
 
         {/* Leave button */}
-        <div className="flex flex-col gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleLeaveClick}
-            className="text-red-600 hover:bg-red-50 hover:text-red-700"
-          >
-            <LogOut className="h-4 w-4" />
-            <span className="ml-1 hidden sm:inline">나가기</span>
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleLeaveClick}
+          className="text-red-600 hover:bg-red-50 hover:text-red-700 w-full sm:w-auto"
+        >
+          <LogOut className="h-4 w-4" />
+          <span className="ml-1">나가기</span>
+        </Button>
       </div>
     </div>
   );
