@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { useSendMessage } from '../hooks/useSendMessage';
 import { useActiveRoom } from '../context/ActiveRoomContext';
 import { useNetwork } from '@/features/network/context/NetworkContext';
+import { useTypingIndicator } from '@/features/realtime/hooks/useTypingIndicator';
+import { TypingIndicator } from '@/features/realtime/components/TypingIndicator';
 import { Send, X } from 'lucide-react';
 
 interface MessageInputProps {
@@ -16,6 +18,7 @@ export const MessageInput = ({ roomId }: MessageInputProps) => {
   const { sendMessage, isSending, error, clearError } = useSendMessage(roomId);
   const { replyTarget, clearReplyTarget } = useActiveRoom();
   const { isOnline } = useNetwork();
+  const { typingUsers, handleTyping } = useTypingIndicator(roomId);
   const [content, setContent] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -75,6 +78,9 @@ export const MessageInput = ({ roomId }: MessageInputProps) => {
         </div>
       )}
 
+      {/* Typing indicator */}
+      <TypingIndicator typingUsers={typingUsers} />
+
       {/* Input form */}
       <form onSubmit={handleSubmit} className="flex gap-2">
         <Input
@@ -84,7 +90,10 @@ export const MessageInput = ({ roomId }: MessageInputProps) => {
             !isOnline ? '오프라인 상태입니다' : '메시지를 입력하세요...'
           }
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={(e) => {
+            setContent(e.target.value);
+            handleTyping();
+          }}
           disabled={isSending || !isOnline}
           maxLength={5000}
           className="flex-1"

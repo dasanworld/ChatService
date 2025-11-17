@@ -7,6 +7,7 @@ import { registerAuthRoutes } from '@/features/auth/backend/route';
 import { registerInviteRoutes } from '@/features/invite/backend/route';
 import { registerRoomListRoutes } from '@/features/room-list/backend/route';
 import { registerMessageRoutes } from '@/features/message/backend/route';
+import { registerRealtimeRoutes } from '@/features/realtime/backend/route';
 import type { AppEnv } from '@/backend/hono/context';
 
 let singletonApp: Hono<AppEnv> | null = null;
@@ -27,6 +28,7 @@ export const createHonoApp = () => {
   registerInviteRoutes(app);
   registerRoomListRoutes(app);
   registerMessageRoutes(app);
+  registerRealtimeRoutes(app);
 
   if (process.env.NODE_ENV === 'production') {
     singletonApp = app;

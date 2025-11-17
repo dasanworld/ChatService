@@ -6,6 +6,8 @@ import { useLongPolling } from '@/features/active-room/hooks/useLongPolling';
 import { MessageList } from '@/features/active-room/components/MessageList';
 import { MessageInput } from '@/features/active-room/components/MessageInput';
 import { NetworkBanner } from '@/features/active-room/components/NetworkBanner';
+import { usePresence } from '@/features/realtime/hooks/usePresence';
+import { UserPresenceDisplay } from '@/features/realtime/components/UserPresence';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -18,6 +20,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const { id: roomId } = use(params);
   const router = useRouter();
   const { setRoom, clearRoom } = useActiveRoom();
+  const { onlineUsers } = usePresence(roomId);
 
   // Start Long Polling
   useLongPolling(roomId);
@@ -61,6 +64,9 @@ export default function ChatPage({ params }: ChatPageProps) {
 
       {/* Network banner */}
       <NetworkBanner />
+
+      {/* User presence */}
+      <UserPresenceDisplay onlineUsers={onlineUsers} />
 
       {/* Messages list */}
       <MessageList roomId={roomId} />
