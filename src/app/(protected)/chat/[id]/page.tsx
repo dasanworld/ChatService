@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useActiveRoom } from '@/features/active-room/context/ActiveRoomContext';
 import { useLongPolling } from '@/features/active-room/hooks/useLongPolling';
 import { MessageList } from '@/features/active-room/components/MessageList';
@@ -8,8 +8,9 @@ import { MessageInput } from '@/features/active-room/components/MessageInput';
 import { NetworkBanner } from '@/features/active-room/components/NetworkBanner';
 import { usePresence } from '@/features/realtime/hooks/usePresence';
 import { UserPresenceDisplay } from '@/features/realtime/components/UserPresence';
+import { InviteDialog } from '@/features/invite/components/InviteDialog';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, UserPlus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 type ChatPageProps = {
@@ -21,6 +22,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const router = useRouter();
   const { setRoom, clearRoom } = useActiveRoom();
   const { onlineUsers } = usePresence(roomId);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
 
   // Start Long Polling
   useLongPolling(roomId);
@@ -36,6 +38,10 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   const handleBack = () => {
     router.back();
+  };
+
+  const handleInvite = () => {
+    setShowInviteDialog(true);
   };
 
   return (
@@ -60,7 +66,24 @@ export default function ChatPage({ params }: ChatPageProps) {
             </p>
           </div>
         </div>
+        
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleInvite}
+          className="flex items-center gap-2"
+        >
+          <UserPlus className="h-4 w-4" />
+          초대
+        </Button>
       </div>
+
+      {/* Invite Dialog */}
+      <InviteDialog
+        roomId={roomId}
+        isOpen={showInviteDialog}
+        onClose={() => setShowInviteDialog(false)}
+      />
 
       {/* Network banner */}
       <NetworkBanner />

@@ -8,6 +8,8 @@ import {
   getLongPollingUpdates,
   getMessageHistory,
   deleteMessage,
+  toggleLikeMessage,
+  getUserLikedMessageIds,
 } from './service';
 import {
   CreateMessageRequestSchema,
@@ -148,6 +150,52 @@ export const registerMessageRoutes = (app: Hono<AppEnv>) => {
     }
 
     const result = await deleteMessage(supabase, messageId, user.id, deleteForAll);
+    return respond(c, result);
+  });
+
+  // POST /api/messages/:messageId/like - Toggle like on a message
+  app.post('/api/messages/:messageId/like', async (c) => {
+    const supabase = c.get('supabase');
+    const messageId = c.req.param('messageId');
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return respond(c, {
+        ok: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          statusCode: 401,
+          message: 'Unauthorized',
+        },
+      } as any);
+    }
+
+    const result = await toggleLikeMessage(supabase, messageId, user.id);
+    return respond(c, result);
+  });
+
+  // GET /api/rooms/:roomId/likes - Get user's liked message IDs in a room
+  app.get('/api/rooms/:roomId/likes', async (c) => {
+    const supabase = c.get('supabase');
+    const roomId = c.req.param('roomId');
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return respond(c, {
+        ok: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          statusCode: 401,
+          message: 'Unauthorized',
+        },
+      } as any);
+    }
+
+    const result = await getUserLikedMessageIds(supabase, roomId, user.id);
     return respond(c, result);
   });
 };

@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { MessageCircle, Heart, Trash2 } from 'lucide-react';
 import { useActiveRoom } from '../context/ActiveRoomContext';
+import { useLikeMessage } from '../hooks/useLikeMessage';
 import { apiClient, extractApiErrorMessage } from '@/lib/remote/api-client';
 import { ReadReceipt } from '@/features/read-receipt/components/ReadReceipt';
 import type { MessageWithUser } from '@/features/message/backend/schema';
@@ -25,7 +26,8 @@ export const MessageItem = ({
   isHidden = false,
   readStatus = null,
 }: MessageItemProps) => {
-  const { setReplyTarget, toggleLike, hideMessage } = useActiveRoom();
+  const { setReplyTarget, hideMessage } = useActiveRoom();
+  const { likeMessage, isLiking } = useLikeMessage();
   const [showActions, setShowActions] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -34,8 +36,11 @@ export const MessageItem = ({
   };
 
   const handleLike = async () => {
-    toggleLike(message.id);
-    // Optimistic update, actual API call would be made in the service layer
+    try {
+      await likeMessage(message.id);
+    } catch (error) {
+      // Error is already handled in the hook
+    }
   };
 
   const handleDelete = async () => {
@@ -69,6 +74,12 @@ export const MessageItem = ({
     );
   }
 
+  // Find reply message (if this is a reply)
+  const { messages } = useActiveRoom();
+  const replyMessage = message.reply_to_message_id
+    ? messages.find((m) => m.id === message.reply_to_message_id)
+    : null;
+
   return (
     <div
       data-message-id={message.id}
@@ -97,6 +108,19 @@ export const MessageItem = ({
           )}
         </div>
 
+        {/* Reply indicator */}
+        {replyMessage && (
+          <div className="mt-1 mb-2 border-l-2 border-blue-400 bg-slate-50 pl-3 py-1 rounded-r">
+            <p className="text-xs text-slate-600">
+              <MessageCircle className="inline h-3 w-3 mr-1" />
+              <span className="font-medium">{replyMessage.user.nickname}</span>님에게 답장
+            </p>
+            <p className="text-xs text-slate-500 line-clamp-1">
+              {replyMessage.is_deleted ? '삭제된 메시지' : replyMessage.content}
+            </p>
+          </div>
+        )}
+
         {/* Message body */}
         <p className="break-words text-slate-800">{message.content}</p>
 
@@ -123,6 +147,7 @@ export const MessageItem = ({
           </button>
           <button
             onClick={handleLike}
+            disabled={isLiking}
             className="p-1 hover:bg-slate-200 rounded"
             title="좋아요"
           >

@@ -490,3 +490,128 @@ export const deleteMessage = async (
     );
   }
 };
+
+/**
+ * Toggle like on a message (like if not liked, unlike if already liked)
+ */
+export const toggleLikeMessage = async (
+  client: SupabaseClient,
+  messageId: string,
+  userId: string,
+): Promise<HandlerResult<{ liked: boolean; likeCount: number }, MessageErrorCode, unknown>> => {
+  try {
+    // Check if message exists
+    const { data: message, error: messageError } = await client
+      .from('messages')
+      .select('id, room_id')
+      .eq('id', messageId)
+      .single();
+
+    if (messageError || !message) {
+      return failure(404, messageErrorCodes.MESSAGE_NOT_FOUND, '메시지를 찾을 수 없습니다');
+    }
+
+    // Check if user is a participant
+    const isParticipant = await isRoomParticipant(client, message.room_id, userId);
+    if (!isParticipant) {
+      return failure(403, messageErrorCodes.NOT_ROOM_PARTICIPANT, '방의 참여자가 아닙니다');
+    }
+
+    // Check if already liked
+    const { data: existingLike, error: checkError } = await client
+      .from('message_likes')
+      .select('id')
+      .eq('message_id', messageId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (checkError) {
+      return failure(500, messageErrorCodes.LIKE_FAILED, checkError.message);
+    }
+
+    let liked: boolean;
+
+    if (existingLike) {
+      // Unlike: remove the like
+      const { error: deleteError } = await client
+        .from('message_likes')
+        .delete()
+        .eq('message_id', messageId)
+        .eq('user_id', userId);
+
+      if (deleteError) {
+        return failure(500, messageErrorCodes.LIKE_FAILED, deleteError.message);
+      }
+      liked = false;
+    } else {
+      // Like: insert new like
+      const { error: insertError } = await client
+        .from('message_likes')
+        .insert([{ message_id: messageId, user_id: userId }]);
+
+      if (insertError) {
+        return failure(500, messageErrorCodes.LIKE_FAILED, insertError.message);
+      }
+      liked = true;
+    }
+
+    // Get updated like count
+    const { data: updatedMessage, error: countError } = await client
+      .from('messages')
+      .select('like_count')
+      .eq('id', messageId)
+      .single();
+
+    if (countError) {
+      return failure(500, messageErrorCodes.LIKE_FAILED, countError.message);
+    }
+
+    return success({
+      liked,
+      likeCount: updatedMessage?.like_count ?? 0,
+    });
+  } catch (error) {
+    return failure(
+      500,
+      messageErrorCodes.LIKE_FAILED,
+      error instanceof Error ? error.message : 'Unknown error',
+    );
+  }
+};
+
+/**
+ * Get user's liked message IDs in a room
+ */
+export const getUserLikedMessageIds = async (
+  client: SupabaseClient,
+  roomId: string,
+  userId: string,
+): Promise<HandlerResult<{ likedMessageIds: string[] }, MessageErrorCode, unknown>> => {
+  try {
+    // Check if user is a participant
+    const isParticipant = await isRoomParticipant(client, roomId, userId);
+    if (!isParticipant) {
+      return failure(403, messageErrorCodes.NOT_ROOM_PARTICIPANT, '방의 참여자가 아닙니다');
+    }
+
+    const { data: likes, error: likesError } = await client
+      .from('message_likes')
+      .select('message_id')
+      .eq('user_id', userId)
+      .in('message_id', client.from('messages').select('id').eq('room_id', roomId));
+
+    if (likesError) {
+      return failure(500, messageErrorCodes.FETCH_LIKES_FAILED, likesError.message);
+    }
+
+    return success({
+      likedMessageIds: (likes || []).map((like: any) => like.message_id),
+    });
+  } catch (error) {
+    return failure(
+      500,
+      messageErrorCodes.FETCH_LIKES_FAILED,
+      error instanceof Error ? error.message : 'Unknown error',
+    );
+  }
+};
