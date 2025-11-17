@@ -432,7 +432,7 @@ export const getMessageHistory = async (
 };
 
 /**
- * Delete a message (soft delete for user or hard delete for all)
+ * Delete a message (mark as deleted for all users)
  */
 export const deleteMessage = async (
   client: SupabaseClient,
@@ -451,34 +451,19 @@ export const deleteMessage = async (
       return failure(404, messageErrorCodes.MESSAGE_NOT_FOUND, '메시지를 찾을 수 없습니다');
     }
 
-    // Check authorization
-    if (!deleteForAll && message.user_id !== userId) {
+    // Check authorization - only message owner can delete
+    if (message.user_id !== userId) {
       return failure(403, messageErrorCodes.FORBIDDEN, '자신의 메시지만 삭제할 수 있습니다');
     }
 
-    if (deleteForAll && message.user_id !== userId) {
-      return failure(403, messageErrorCodes.FORBIDDEN, '메시지 소유자만 모두에게 삭제 가능합니다');
-    }
+    // Mark message as deleted
+    const { error: updateError } = await client
+      .from('messages')
+      .update({ is_deleted: true })
+      .eq('id', messageId);
 
-    if (deleteForAll) {
-      // Hard delete: mark as deleted
-      const { error: updateError } = await client
-        .from('messages')
-        .update({ is_deleted: true })
-        .eq('id', messageId);
-
-      if (updateError) {
-        return failure(500, messageErrorCodes.MESSAGE_DELETE_FAILED, updateError.message);
-      }
-    } else {
-      // Soft delete: add to hidden_messages
-      const { error: hideError } = await client
-        .from('hidden_messages')
-        .insert([{ message_id: messageId, user_id: userId }]);
-
-      if (hideError) {
-        return failure(500, messageErrorCodes.MESSAGE_DELETE_FAILED, hideError.message);
-      }
+    if (updateError) {
+      return failure(500, messageErrorCodes.MESSAGE_DELETE_FAILED, updateError.message);
     }
 
     return success({ success: true });

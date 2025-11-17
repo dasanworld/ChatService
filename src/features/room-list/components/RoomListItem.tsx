@@ -1,7 +1,5 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useUI } from '@/features/ui/context/UIContext';
 import { Button } from '@/components/ui/button';
 import { MessageCircle, Users, LogOut } from 'lucide-react';
@@ -12,20 +10,23 @@ interface RoomListItemProps {
 }
 
 export const RoomListItem = ({ room }: RoomListItemProps) => {
-  const router = useRouter();
-  const { openModal } = useUI();
+  const { openModal, openChatRoom } = useUI();
+
+  const handleRoomClick = () => {
+    openChatRoom(room.id);
+  };
 
   const handleLeaveClick = (e: React.MouseEvent) => {
-    e.preventDefault();
+    e.stopPropagation();
     // Store room ID in sessionStorage for modal to access
     sessionStorage.setItem('leave_room_id', room.id);
     openModal('leaveRoom');
   };
 
   return (
-    <Link
-      href={`/chat/${room.id}`}
-      className="block rounded-lg border border-slate-200 p-4 transition-all hover:border-slate-300 hover:shadow-md"
+    <div
+      onClick={handleRoomClick}
+      className="block cursor-pointer rounded-lg border border-slate-200 p-4 transition-all hover:border-slate-300 hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-4">
         {/* Room info */}
@@ -58,6 +59,6 @@ export const RoomListItem = ({ room }: RoomListItemProps) => {
           </Button>
         </div>
       </div>
-    </Link>
+    </div>
   );
 };

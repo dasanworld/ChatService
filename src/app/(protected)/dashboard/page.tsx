@@ -7,6 +7,7 @@ import { useUI } from "@/features/ui/context/UIContext";
 import { RoomList } from "@/features/room-list/components/RoomList";
 import { CreateRoomModal } from "@/features/room-list/components/CreateRoomModal";
 import { LeaveRoomModal } from "@/features/room-list/components/LeaveRoomModal";
+import { ChatRoomDialog } from "@/features/active-room/components/ChatRoomDialog";
 import { MessageSquarePlus } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 
@@ -17,7 +18,7 @@ type DashboardPageProps = {
 export default function DashboardPage({ params }: DashboardPageProps) {
   void params;
   const { user, logout } = useCurrentUser();
-  const { openModal } = useUI();
+  const { openModal, openChatRoom } = useUI();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
 
@@ -38,6 +39,18 @@ export default function DashboardPage({ params }: DashboardPageProps) {
     
     checkSession();
   }, []);
+
+  // Auto-open chat room if redirected from invite
+  useEffect(() => {
+    const roomId = sessionStorage.getItem('open_chat_room');
+    if (roomId) {
+      sessionStorage.removeItem('open_chat_room');
+      // Small delay to ensure dashboard is mounted
+      setTimeout(() => {
+        openChatRoom(roomId);
+      }, 100);
+    }
+  }, [openChatRoom]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -102,6 +115,7 @@ export default function DashboardPage({ params }: DashboardPageProps) {
       {/* Modals */}
       <CreateRoomModal />
       <LeaveRoomModal />
+      <ChatRoomDialog />
     </div>
   );
 }

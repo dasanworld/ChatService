@@ -1,5 +1,6 @@
 -- Migration: Add messages and room_events tables for chat functionality
--- Creates messages, room_events, and hidden_messages tables with Long Polling support
+-- Creates messages and room_events tables with Long Polling support
+-- Note: hidden_messages table removed - using is_deleted flag instead
 
 BEGIN;
 
@@ -28,14 +29,8 @@ CREATE TABLE IF NOT EXISTS public.room_events (
   UNIQUE(room_id, version)
 );
 
--- Create hidden_messages table (soft delete tracking)
-CREATE TABLE IF NOT EXISTS public.hidden_messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  message_id UUID NOT NULL REFERENCES public.messages(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(message_id, user_id) -- One user can hide each message once
-);
+-- NOTE: hidden_messages table removed - using is_deleted flag for message deletion instead
+-- Soft delete per-user is not implemented; all deletions are visible to all users
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_messages_room_id ON public.messages(room_id);
@@ -46,9 +41,6 @@ CREATE INDEX IF NOT EXISTS idx_messages_room_created ON public.messages(room_id,
 CREATE INDEX IF NOT EXISTS idx_room_events_room_id ON public.room_events(room_id);
 CREATE INDEX IF NOT EXISTS idx_room_events_version ON public.room_events(room_id, version DESC);
 
-CREATE INDEX IF NOT EXISTS idx_hidden_messages_user_id ON public.hidden_messages(user_id);
-CREATE INDEX IF NOT EXISTS idx_hidden_messages_message_id ON public.hidden_messages(message_id);
-
 -- Add triggers to update updated_at
 CREATE TRIGGER handle_messages_updated_at
   BEFORE UPDATE ON public.messages
@@ -58,6 +50,5 @@ CREATE TRIGGER handle_messages_updated_at
 -- Disable RLS for all new tables (as per requirements)
 ALTER TABLE IF EXISTS public.messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.room_events DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.hidden_messages DISABLE ROW LEVEL SECURITY;
 
 COMMIT;

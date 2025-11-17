@@ -5,6 +5,7 @@ export interface ModalState {
   createRoom: boolean;
   leaveRoom: boolean;
   confirmDelete: boolean;
+  chatRoom: boolean;
 }
 
 /**
@@ -22,6 +23,7 @@ export interface Toast {
 export interface UIState {
   modals: ModalState;
   toasts: Toast[];
+  currentChatRoomId: string | null;
 }
 
 /**
@@ -32,4 +34,5 @@ export type UIAction =
   | { type: 'CLOSE_MODAL'; payload: keyof ModalState }
   | { type: 'ADD_TOAST'; payload: Toast }
   | { type: 'REMOVE_TOAST'; payload: string }
-  | { type: 'CLEAR_TOASTS' };
+  | { type: 'CLEAR_TOASTS' }
+  | { type: 'SET_CHAT_ROOM'; payload: string | null };

@@ -5,8 +5,10 @@ export const initialUIState: UIState = {
     createRoom: false,
     leaveRoom: false,
     confirmDelete: false,
+    chatRoom: false,
   },
   toasts: [],
+  currentChatRoomId: null,
 };
 
 export const uiReducer = (
@@ -48,6 +50,12 @@ export const uiReducer = (
       return {
         ...state,
         toasts: [],
+      };
+
+    case 'SET_CHAT_ROOM':
+      return {
+        ...state,
+        currentChatRoomId: action.payload,
       };
 
     default:

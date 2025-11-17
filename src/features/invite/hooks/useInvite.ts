@@ -44,10 +44,11 @@ export const useInvite = (token: string) => {
       const joinResponse = await apiClient.post(`/api/invites/${token}/join`);
 
       if (joinResponse.status === 200) {
-        // Step 4: Redirect to room
+        // Step 4: Store room ID and redirect to dashboard
         sessionStorage.removeItem('invite_token');
-        setState({ status: 'success', roomId: token });
-        router.replace(`/chat/${token}`);
+        sessionStorage.setItem('open_chat_room', inviteInfo.roomId);
+        setState({ status: 'success', roomId: inviteInfo.roomId });
+        router.replace('/dashboard');
       }
     } catch (error) {
       const message = extractApiErrorMessage(error, '유효하지 않은 초대 링크입니다');

@@ -95,10 +95,25 @@ export const useUI = () => {
     dispatch({ type: 'CLEAR_TOASTS' });
   }, [dispatch]);
 
+  // Chat room actions
+  const openChatRoom = useCallback(
+    (roomId: string) => {
+      dispatch({ type: 'SET_CHAT_ROOM', payload: roomId });
+      dispatch({ type: 'OPEN_MODAL', payload: 'chatRoom' });
+    },
+    [dispatch],
+  );
+
+  const closeChatRoom = useCallback(() => {
+    dispatch({ type: 'CLOSE_MODAL', payload: 'chatRoom' });
+    dispatch({ type: 'SET_CHAT_ROOM', payload: null });
+  }, [dispatch]);
+
   return {
     // State
     modals: state.modals,
     toasts: state.toasts,
+    currentChatRoomId: state.currentChatRoomId,
 
     // Modal actions
     openModal,
@@ -110,5 +125,9 @@ export const useUI = () => {
     showToast,
     hideToast,
     clearToasts,
+
+    // Chat room actions
+    openChatRoom,
+    closeChatRoom,
   };
 };
