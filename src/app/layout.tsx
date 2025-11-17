@@ -18,7 +18,7 @@ export default async function RootLayout({
 
   return (
     <html lang="ko" suppressHydrationWarning>
-      <body className="antialiased font-sans">
+      <body className="antialiased font-sans bg-white">
         <Providers>
           <CurrentUserProvider initialState={currentUser}>
             {children}

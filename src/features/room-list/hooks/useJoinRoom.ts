@@ -59,14 +59,17 @@ export const useJoinRoom = () => {
 
         const response = await apiClient.get(`/api/invites/${roomId}`);
 
-        if (!response.data.ok) {
+        // 대응: 서버가 {ok, data} 형태가 아니더라도 room 정보를 바로 반환할 수 있음
+        const payload = response.data as any;
+        if (payload?.ok === false) {
           const errorMessage =
-            response.data.error?.message || '초대 코드를 찾을 수 없습니다.';
+            payload.error?.message || '초대 코드를 찾을 수 없습니다.';
           setError(errorMessage);
           return null;
         }
 
-        return response.data.data;
+        // ok 필드가 없으면 그대로 room 정보를 사용
+        return payload.data ?? payload;
       } catch (err) {
         const message = extractApiErrorMessage(
           err,
@@ -92,9 +95,11 @@ export const useJoinRoom = () => {
       try {
         const response = await apiClient.post(`/api/invites/${roomId}/join`);
 
-        if (!response.data.ok) {
+        // 대응: 서버가 {ok, data} 형태가 아닐 수도 있음
+        const payload = response.data as any;
+        if (payload?.ok === false) {
           const errorMessage =
-            response.data.error?.message || '채팅방 참여에 실패했습니다.';
+            payload.error?.message || '채팅방 참여에 실패했습니다.';
           setError(errorMessage);
           return false;
         }

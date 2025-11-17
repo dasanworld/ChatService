@@ -44,7 +44,7 @@ export default function DashboardPage({ params }: DashboardPageProps) {
   };
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-white">
       {/* Global Navigation */}
       <nav className="border-b border-slate-200 bg-white px-6 py-4">
         <div className="mx-auto flex max-w-4xl items-center justify-between">

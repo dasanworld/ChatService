@@ -86,21 +86,23 @@ export const MessageItem = ({
   return (
     <div
       data-message-id={message.id}
-      className={`flex gap-3 px-4 py-2 transition-colors ${
+      className={`flex px-4 py-2 transition-colors ${
         isPending ? 'opacity-75' : ''
-      } bg-white`}
+      } bg-white ${isMine ? '' : 'pl-10'}`}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
       {/* Avatar placeholder */}
-      <div
-        className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
-          isMine
-            ? 'border-slate-300 bg-white text-slate-700'
-            : 'border-amber-200 bg-amber-100 text-amber-800'
-        }`}
-      >
-        {(message.user.nickname || '?').slice(0, 1).toUpperCase()}
+      <div className="flex-shrink-0">
+        <div
+          className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-semibold ${
+            isMine
+              ? 'border-slate-300 bg-white text-slate-700'
+              : 'border-amber-200 bg-amber-100 text-amber-800'
+          }`}
+        >
+          {(message.user.nickname || '?').slice(0, 1).toUpperCase()}
+        </div>
       </div>
 
       {/* Message content */}

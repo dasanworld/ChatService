@@ -81,7 +81,7 @@ export default function Home() {
   }, [handleSignOut, isAuthenticated, isLoading, user]);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-white via-slate-50 to-blue-50 text-slate-900 flex flex-col">
+    <main className="min-h-screen bg-white text-slate-900 flex flex-col">
       {/* Global Navigation */}
       <nav className="border-b border-slate-200 bg-white px-6 py-4 shadow-sm">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between">

@@ -8,7 +8,6 @@ import type { AppEnv } from '@/backend/hono/context';
 export const withAuth = () =>
   createMiddleware<AppEnv>(async (c, next) => {
     const supabase = c.get('supabase');
-    const logger = c.get('logger');
 
     try {
       // Try to get Authorization header first
@@ -16,12 +15,10 @@ export const withAuth = () =>
 
       if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.substring(7);
-        logger.info('🔑 Using Bearer token authentication');
         
         const { data: { user }, error } = await supabase.auth.getUser(token);
         
         if (error) {
-          logger.error('❌ Bearer token auth error:', error.message);
           return c.json(
             {
               ok: false,
@@ -37,7 +34,6 @@ export const withAuth = () =>
         }
       
         if (user) {
-          logger.info('✅ User authenticated via Bearer token:', user.id);
           c.set('user', user);
           await next();
           return;
@@ -62,11 +58,9 @@ export const withAuth = () =>
         );
       }
 
-      logger.info('✅ User authenticated via cookies:', user.id);
       c.set('user', user);
       await next();
     } catch (err) {
-      logger.error('💥 Auth middleware error:', err);
       return c.json(
         {
           ok: false,

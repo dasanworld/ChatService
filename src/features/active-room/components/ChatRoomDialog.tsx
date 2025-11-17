@@ -104,7 +104,7 @@ export const ChatRoomDialog = () => {
       <Sheet open={modals.chatRoom} onOpenChange={(open) => !open && handleClose()}>
         <SheetContent 
           side="right" 
-          className="flex flex-col p-0"
+          className="flex flex-col p-0 bg-white"
           style={{ width: `${width}px`, maxWidth: 'none' }}
         >
           {/* Resize handle */}
