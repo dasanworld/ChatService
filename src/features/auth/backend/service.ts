@@ -123,3 +123,15 @@ export const authenticateUser = async (
     },
   });
 };
+
+export const logoutUser = async (
+  client: SupabaseClient,
+): Promise<HandlerResult<null, AuthErrorCode, unknown>> => {
+  const { error } = await client.auth.signOut();
+
+  if (error) {
+    return failure(500, authErrorCodes.SIGNUP_FAILED, 'Logout failed');
+  }
+
+  return success(null);
+};

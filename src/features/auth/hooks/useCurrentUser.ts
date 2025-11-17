@@ -13,6 +13,7 @@ export const useCurrentUser = () => {
       isAuthenticated: context.isAuthenticated,
       isLoading: context.isLoading,
       refresh: context.refresh,
+      logout: context.logout,
     }),
     [context]
   );

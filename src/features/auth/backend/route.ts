@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { respond } from '@/backend/http/response';
 import type { AppEnv } from '@/backend/hono/context';
 import { SignupRequestSchema, LoginRequestSchema } from './schema';
-import { createUserProfile, authenticateUser } from './service';
+import { createUserProfile, authenticateUser, logoutUser } from './service';
 
 export const registerAuthRoutes = (app: Hono<AppEnv>) => {
   app.post(
@@ -35,6 +35,17 @@ export const registerAuthRoutes = (app: Hono<AppEnv>) => {
         email: body.email,
         password: body.password,
       });
+
+      return respond(c, result);
+    }
+  );
+
+  app.post(
+    '/api/auth/logout',
+    async (c) => {
+      const supabase = c.get('supabase');
+
+      const result = await logoutUser(supabase);
 
       return respond(c, result);
     }

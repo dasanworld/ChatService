@@ -8,8 +8,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { match, P } from "ts-pattern";
+import { apiClient, extractApiErrorMessage } from "@/lib/remote/api-client";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import type {
   CurrentUserContextValue,
@@ -27,6 +29,7 @@ export const CurrentUserProvider = ({
   children,
   initialState,
 }: CurrentUserProviderProps) => {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [snapshot, setSnapshot] = useState<CurrentUserSnapshot>(initialState);
 
@@ -61,14 +64,42 @@ export const CurrentUserProvider = ({
     }
   }, [queryClient]);
 
+  const logout = useCallback(async () => {
+    try {
+      // Clear client-side session first
+      const supabase = getSupabaseBrowserClient();
+      await supabase.auth.signOut();
+
+      // Call API to clear server-side session
+      await apiClient.post('/api/auth/logout');
+
+      // Update state
+      const fallbackSnapshot: CurrentUserSnapshot = {
+        status: "unauthenticated",
+        user: null,
+      };
+      setSnapshot(fallbackSnapshot);
+      queryClient.setQueryData(["currentUser"], fallbackSnapshot);
+
+      // Redirect to login
+      router.push('/login');
+    } catch (error) {
+      const message = extractApiErrorMessage(error, '로그아웃에 실패했습니다');
+      console.error('Logout failed:', message);
+      // Even if logout fails on server, redirect to login
+      router.push('/login');
+    }
+  }, [router, queryClient]);
+
   const value = useMemo<CurrentUserContextValue>(() => {
     return {
       ...snapshot,
       refresh,
+      logout,
       isAuthenticated: snapshot.status === "authenticated",
       isLoading: snapshot.status === "loading",
     };
-  }, [refresh, snapshot]);
+  }, [refresh, logout, snapshot]);
 
   return (
     <CurrentUserContext.Provider value={value}>

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
+import { Button } from "@/components/ui/button";
 import { useCurrentUser } from "@/features/auth/hooks/useCurrentUser";
 
 type DashboardPageProps = {
@@ -9,15 +11,35 @@ type DashboardPageProps = {
 
 export default function DashboardPage({ params }: DashboardPageProps) {
   void params;
-  const { user } = useCurrentUser();
+  const { user, logout } = useCurrentUser();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-12">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold">대시보드</h1>
-        <p className="text-slate-500">
-          {user?.email ?? "알 수 없는 사용자"} 님, 환영합니다.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-semibold">대시보드</h1>
+          <p className="text-slate-500">
+            {user?.email ?? "알 수 없는 사용자"} 님, 환영합니다.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+        >
+          {isLoggingOut ? "로그아웃 중..." : "로그아웃"}
+        </Button>
       </header>
       <div className="overflow-hidden rounded-xl border border-slate-200">
         <Image

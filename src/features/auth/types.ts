@@ -12,6 +12,7 @@ export type CurrentUserSnapshot =
 
 export type CurrentUserContextValue = CurrentUserSnapshot & {
   refresh: () => Promise<void>;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
 };
