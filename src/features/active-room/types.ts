@@ -49,6 +49,7 @@ export type ActiveRoomAction =
   | { type: 'HISTORY_RECEIVED'; payload: { messages: MessageWithUser[]; hasMore: boolean } }
   // Likes
   | { type: 'MESSAGE_LIKE_TOGGLE'; payload: string } // messageId
+  | { type: 'LIKED_MESSAGES_LOADED'; payload: string[] } // Load initial liked messages
   // Reply target
   | { type: 'REPLY_TARGET_SET'; payload: MessageWithUser }
   | { type: 'REPLY_TARGET_CLEAR' }

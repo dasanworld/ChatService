@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useActiveRoom } from '@/features/active-room/context/ActiveRoomContext';
 import { useLongPolling } from '@/features/active-room/hooks/useLongPolling';
 import { MessageList } from '@/features/active-room/components/MessageList';
@@ -17,13 +17,18 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, RefreshCw } from 'lucide-react';
 
 export const ChatRoomDialog = () => {
   const { modals, currentChatRoomId, closeChatRoom } = useUI();
   const { setRoom, clearRoom } = useActiveRoom();
   const { onlineUsers } = usePresence(currentChatRoomId);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [width, setWidth] = useState(768); // Default width in pixels
+  const isResizingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
 
   // Start Long Polling when room is open
   useLongPolling(currentChatRoomId);
@@ -42,33 +47,92 @@ export const ChatRoomDialog = () => {
     closeChatRoom();
   };
 
+  const handleRefresh = () => {
+    if (!currentChatRoomId) return;
+    setIsRefreshing(true);
+    // Clear room to reset all state
+    clearRoom();
+    // Wait a bit then set room again to trigger fresh snapshot
+    setTimeout(() => {
+      setRoom(currentChatRoomId);
+      setIsRefreshing(false);
+    }, 200);
+  };
+
+  // Resize handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    isResizingRef.current = true;
+    startXRef.current = e.clientX;
+    startWidthRef.current = width;
+    e.preventDefault();
+  }, [width]);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizingRef.current) return;
+    
+    const deltaX = startXRef.current - e.clientX;
+    const newWidth = Math.min(Math.max(400, startWidthRef.current + deltaX), window.innerWidth - 100);
+    setWidth(newWidth);
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    isResizingRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
+
   return (
     <>
       <Sheet open={modals.chatRoom} onOpenChange={(open) => !open && handleClose()}>
         <SheetContent 
           side="right" 
-          className="flex w-full flex-col p-0 sm:max-w-2xl lg:max-w-4xl"
+          className="flex flex-col p-0"
+          style={{ width: `${width}px`, maxWidth: 'none' }}
         >
+          {/* Resize handle */}
+          <div
+            className="absolute left-0 top-0 h-full w-1 cursor-ew-resize hover:bg-blue-500 transition-colors"
+            onMouseDown={handleMouseDown}
+          />
+
           {/* Header */}
           <SheetHeader className="border-b border-slate-200 px-6 py-4">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex items-center gap-3">
                 <SheetTitle className="text-xl font-semibold">채팅방</SheetTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="h-8 w-8 p-0"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                </Button>
                 {currentChatRoomId && (
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="text-xs text-slate-500">
                     {currentChatRoomId}
                   </p>
                 )}
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowInviteDialog(true)}
-                className="flex items-center gap-2"
-              >
-                <UserPlus className="h-4 w-4" />
-                초대
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowInviteDialog(true)}
+                  className="flex items-center gap-2"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  초대
+                </Button>
+              </div>
             </div>
           </SheetHeader>
 

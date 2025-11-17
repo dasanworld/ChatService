@@ -27,8 +27,9 @@ export const useLikeMessage = () => {
         const response = await apiClient.post(`/api/messages/${messageId}/like`);
         const { liked, likeCount } = response.data;
 
-        // Note: Optimistic update already done, no need to update again
-        // The actual like count will be synced via long polling or next snapshot
+        // Sync with server response (in case optimistic update was wrong)
+        // This ensures UI matches server state
+        // Note: like count will be synced via long polling or next snapshot
       } catch (err) {
         // Revert optimistic update on error
         toggleLike(messageId);

@@ -42,21 +42,24 @@ const getMessagesWithUser = async (
 
   // Fetch users separately
   const userIds = [...new Set(messages.map(m => m.user_id))];
-  const { data: profiles, error: profilesError } = await client
+  const { data: users, error: usersError } = await client
     .from('profiles')
     .select('id, nickname, avatar_url')
     .in('id', userIds);
 
-  if (profilesError) return null;
+  if (usersError) {
+    // Log error but don't fail completely
+    console.error('Failed to fetch user profiles:', usersError);
+  }
 
   // Map user metadata to expected format
   const userMap = new Map(
-    (profiles || []).map((profile) => [
-      profile.id,
+    (users || []).map(u => [
+      u.id,
       {
-        id: profile.id,
-        nickname: profile.nickname || 'Unknown',
-        avatar_url: profile.avatar_url,
+        id: u.id,
+        nickname: u.nickname || 'Unknown',
+        avatar_url: u.avatar_url,
       },
     ])
   );
@@ -109,26 +112,32 @@ export const getRoomSnapshot = async (
 
     // Fetch users separately
     const userIds = [...new Set((messages || []).map(m => m.user_id))];
-    const { data: profiles, error: profilesError } = await client
-      .from('profiles')
-      .select('id, nickname, avatar_url')
-      .in('id', userIds);
+    
+    let userMap = new Map<string, { id: string; nickname: string; avatar_url: string | null }>();
+    
+    if (userIds.length > 0) {
+      const { data: profiles, error: profilesError } = await client
+        .from('profiles')
+        .select('id, nickname, avatar_url')
+        .in('id', userIds);
 
-    if (profilesError) {
-      return failure(500, messageErrorCodes.FETCH_SNAPSHOT_FAILED, profilesError.message);
+      if (profilesError) {
+        // Log error but don't fail - use default user info
+        console.error('Failed to fetch profiles:', profilesError);
+      }
+
+      // Map user metadata to expected format
+      userMap = new Map(
+        (profiles || []).map((profile) => [
+          profile.id,
+          {
+            id: profile.id,
+            nickname: profile.nickname || 'Unknown',
+            avatar_url: profile.avatar_url,
+          },
+        ])
+      );
     }
-
-    // Map user metadata to expected format
-    const userMap = new Map(
-      (profiles || []).map((profile) => [
-        profile.id,
-        {
-          id: profile.id,
-          nickname: profile.nickname || 'Unknown',
-          avatar_url: profile.avatar_url,
-        },
-      ])
-    );
 
     // Combine messages with user info and reverse to show chronological order (oldest first)
     const messagesWithUsers = (messages || []).map(msg => ({
@@ -387,26 +396,32 @@ export const getMessageHistory = async (
 
     // Fetch users separately
     const userIds = [...new Set(result.map(m => m.user_id))];
-    const { data: profiles, error: profilesError } = await client
-      .from('profiles')
-      .select('id, nickname, avatar_url')
-      .in('id', userIds);
+    
+    let userMap = new Map<string, { id: string; nickname: string; avatar_url: string | null }>();
+    
+    if (userIds.length > 0) {
+      const { data: profiles, error: profilesError } = await client
+        .from('profiles')
+        .select('id, nickname, avatar_url')
+        .in('id', userIds);
 
-    if (profilesError) {
-      return failure(500, messageErrorCodes.FETCH_HISTORY_FAILED, profilesError.message);
+      if (profilesError) {
+        // Log error but don't fail - use default user info
+        console.error('Failed to fetch profiles in history:', profilesError);
+      }
+
+      // Map user metadata to expected format
+      userMap = new Map(
+        (profiles || []).map((profile) => [
+          profile.id,
+          {
+            id: profile.id,
+            nickname: profile.nickname || 'Unknown',
+            avatar_url: profile.avatar_url,
+          },
+        ])
+      );
     }
-
-    // Map user metadata to expected format
-    const userMap = new Map(
-      (profiles || []).map((profile) => [
-        profile.id,
-        {
-          id: profile.id,
-          nickname: profile.nickname || 'Unknown',
-          avatar_url: profile.avatar_url,
-        },
-      ])
-    );
 
     // Combine messages with user info
     const messagesWithUsers = result.map(msg => ({

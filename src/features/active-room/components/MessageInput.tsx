@@ -38,9 +38,16 @@ export const MessageInput = ({ roomId }: MessageInputProps) => {
         replyToMessageId: replyTarget?.id,
       });
       setContent('');
-      inputRef.current?.focus();
+      // Use setTimeout to ensure focus after all state updates
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
     } catch (err) {
       // Error is already set in the hook
+      // Restore focus even on error
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
     }
   };
 

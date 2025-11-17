@@ -24,6 +24,7 @@ export const useLongPolling = (roomId: string | null) => {
     pollingSuccess,
     setPollingError,
     lastSyncVersion,
+    loadLikedMessages,
   } = useActiveRoom();
 
   const { isOnline, syncStart, syncSuccess, syncError, backoffDelay } = useNetwork();
@@ -47,6 +48,15 @@ export const useLongPolling = (roomId: string | null) => {
       receiveSnapshot(messages, version, hasMore);
       snapshotFetchedRef.current = true;
       syncSuccess();
+
+      // Fetch liked messages
+      try {
+        const likesResponse = await apiClient.get(`/api/rooms/${roomId}/likes`);
+        const { likedMessageIds } = likesResponse.data;
+        loadLikedMessages(likedMessageIds || []);
+      } catch (err) {
+        console.error('Failed to load liked messages:', err);
+      }
     } catch (error) {
       const message = extractApiErrorMessage(error, 'Snapshot 로드 실패');
       setPollingError(message);
@@ -136,6 +146,10 @@ export const useLongPolling = (roomId: string | null) => {
 
   // Fetch snapshot on mount or roomId change
   useEffect(() => {
+    if (!roomId) {
+      snapshotFetchedRef.current = false;
+      return;
+    }
     snapshotFetchedRef.current = false;
     fetchSnapshot();
   }, [roomId, fetchSnapshot]);

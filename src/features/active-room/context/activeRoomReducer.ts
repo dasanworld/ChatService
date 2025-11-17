@@ -235,6 +235,12 @@ export const activeRoomReducer = (
         replyTarget: null,
       };
 
+    case 'LIKED_MESSAGES_LOADED':
+      return {
+        ...state,
+        likedMessageIds: new Set(action.payload),
+      };
+
     case 'RESET':
       return initialActiveRoomState;
 

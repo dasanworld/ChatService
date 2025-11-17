@@ -98,6 +98,14 @@ export const useActiveRoom = () => {
     [dispatch],
   );
 
+  // Load liked messages
+  const loadLikedMessages = useCallback(
+    (messageIds: string[]) => {
+      dispatch({ type: 'LIKED_MESSAGES_LOADED', payload: messageIds });
+    },
+    [dispatch],
+  );
+
   // Message actions
   const addPendingMessage = useCallback(
     (clientMessageId: string, message: MessageWithUser) => {
@@ -227,6 +235,7 @@ export const useActiveRoom = () => {
     pollingStart,
     pollingSuccess,
     setPollingError,
+    loadLikedMessages,
     addPendingMessage,
     removePendingMessage,
     replacePendingMessage,
