@@ -25,7 +25,7 @@ export const useInvite = (token: string) => {
     try {
       const verifyResponse = await apiClient.get(`/api/invites/${token}`);
 
-      const inviteInfo = verifyResponse.data.data;
+      const inviteInfo = verifyResponse.data;
 
       // Step 2: Check authentication
       if (!isAuthenticated) {

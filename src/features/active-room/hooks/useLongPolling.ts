@@ -42,7 +42,7 @@ export const useLongPolling = (roomId: string | null) => {
       pollingStart();
 
       const response = await apiClient.get(`/api/rooms/${roomId}`);
-      const { messages, version, hasMore } = response.data.data;
+      const { messages, version, hasMore } = response.data;
 
       receiveSnapshot(messages, version, hasMore);
       snapshotFetchedRef.current = true;

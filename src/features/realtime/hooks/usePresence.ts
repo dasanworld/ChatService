@@ -37,7 +37,7 @@ export const usePresence = (roomId: string | null): UsePresenceReturn => {
         `/api/rooms/${roomId}/presence`,
       );
 
-      const { online_users } = response.data.data;
+      const { online_users } = response.data;
       setOnlineUsers(online_users || []);
     } catch (error) {
       // Silently fail for polling

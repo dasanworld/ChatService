@@ -210,6 +210,7 @@ export const useActiveRoom = () => {
     replyTarget: state.replyTarget,
     hasMoreHistory: state.hasMoreHistory,
     isLoadingHistory: state.isLoadingHistory,
+    isSnapshotLoaded: state.isSnapshotLoaded,
 
     // Computed
     isLive: state.pollingStatus === 'live',

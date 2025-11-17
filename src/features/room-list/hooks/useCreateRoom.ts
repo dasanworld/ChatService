@@ -12,7 +12,7 @@ export const useCreateRoom = () => {
   return useMutation({
     mutationFn: async (request: CreateRoomRequest) => {
       const response = await apiClient.post('/api/rooms', request);
-      const parsed = CreateRoomResponseSchema.parse(response.data.data);
+      const parsed = CreateRoomResponseSchema.parse(response.data);
       return parsed;
     },
     onSuccess: (newRoom) => {

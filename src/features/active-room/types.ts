@@ -21,6 +21,7 @@ export interface ActiveRoomState {
   replyTarget: MessageWithUser | null;
   hasMoreHistory: boolean;
   isLoadingHistory: boolean;
+  isSnapshotLoaded: boolean; // Track if initial snapshot has been loaded
 }
 
 export type ActiveRoomAction =

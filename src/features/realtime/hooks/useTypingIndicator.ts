@@ -37,7 +37,7 @@ export const useTypingIndicator = (roomId: string | null): UseTypingIndicatorRet
         `/api/rooms/${roomId}/typing`,
       );
 
-      const { typing_users } = response.data.data;
+      const { typing_users } = response.data;
       setTypingUsers(typing_users || []);
     } catch (error) {
       // Silently fail for polling

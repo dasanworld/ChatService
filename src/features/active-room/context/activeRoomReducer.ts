@@ -12,6 +12,7 @@ export const initialActiveRoomState: ActiveRoomState = {
   replyTarget: null,
   hasMoreHistory: false,
   isLoadingHistory: false,
+  isSnapshotLoaded: false,
 };
 
 export const activeRoomReducer = (
@@ -36,6 +37,7 @@ export const activeRoomReducer = (
         hasMoreHistory: action.payload.hasMore,
         pollingStatus: 'live',
         pollingError: null,
+        isSnapshotLoaded: true,
       };
 
     case 'POLLING_START':

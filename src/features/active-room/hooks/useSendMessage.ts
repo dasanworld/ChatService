@@ -85,7 +85,7 @@ export const useSendMessage = (roomId: string | null) => {
           },
         );
 
-        const actualMessage: MessageWithUser = response.data.data;
+        const actualMessage: MessageWithUser = response.data;
 
         // Replace pending message with actual message from server
         replacePendingMessage(clientMessageId, actualMessage);

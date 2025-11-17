@@ -41,10 +41,7 @@ export const getTypingUsers = async (
     // Get typing users (exclude current user, only non-expired)
     const { data: typingIndicators, error } = await client
       .from('typing_indicator')
-      .select(
-        `user_id,
-         user:user_id(user_metadata)`,
-      )
+      .select('user_id')
       .eq('room_id', roomId)
       .neq('user_id', userId)
       .gt('expires_at', new Date().toISOString());
@@ -53,13 +50,27 @@ export const getTypingUsers = async (
       return failure(500, realtimeErrorCodes.TYPING_FETCH_FAILED, error.message);
     }
 
-    // Extract users with nicknames from user metadata
-    const typingUsers = (typingIndicators || [])
-      .map((item: any) => ({
-        user_id: item.user_id,
-        nickname: item.user?.user_metadata?.nickname || 'Unknown',
-      }))
-      .filter((u) => u.user_id); // Filter out invalid entries
+    // Get user profiles for typing users
+    const userIds = (typingIndicators || []).map((item) => item.user_id);
+    
+    if (userIds.length === 0) {
+      return success({ typing_users: [] });
+    }
+
+    const { data: profiles, error: profileError } = await client
+      .from('profiles')
+      .select('id, nickname')
+      .in('id', userIds);
+
+    if (profileError) {
+      return failure(500, realtimeErrorCodes.TYPING_FETCH_FAILED, profileError.message);
+    }
+
+    // Map profiles to typing users
+    const typingUsers = (profiles || []).map((profile) => ({
+      user_id: profile.id,
+      nickname: profile.nickname || 'Unknown',
+    }));
 
     return success({
       typing_users: typingUsers,
@@ -154,28 +165,44 @@ export const getPresence = async (
     // Get all presence records for this room
     const { data: presenceRecords, error } = await client
       .from('user_presence')
-      .select(
-        `user_id,
-         is_online,
-         last_seen,
-         user:user_id(user_metadata)`,
-      )
-      .eq('room_id', roomId);
+      .select('user_id, is_online, last_seen')
+      .eq('room_id', roomId)
+      .eq('is_online', true);
 
     if (error) {
       return failure(500, realtimeErrorCodes.PRESENCE_FETCH_FAILED, error.message);
     }
 
-    // Extract users with nicknames from user metadata
-    const onlineUsers = (presenceRecords || [])
-      .filter((p: any) => p.is_online) // Only online users
-      .map((item: any) => ({
-        user_id: item.user_id,
-        nickname: item.user?.user_metadata?.nickname || 'Unknown',
-        is_online: item.is_online,
-        last_seen: item.last_seen,
-      }))
-      .filter((u) => u.user_id); // Filter out invalid entries
+    // Get user profiles for online users
+    const userIds = (presenceRecords || []).map((item) => item.user_id);
+    
+    if (userIds.length === 0) {
+      return success({ online_users: [] });
+    }
+
+    const { data: profiles, error: profileError } = await client
+      .from('profiles')
+      .select('id, nickname')
+      .in('id', userIds);
+
+    if (profileError) {
+      return failure(500, realtimeErrorCodes.PRESENCE_FETCH_FAILED, profileError.message);
+    }
+
+    // Map profiles to presence records
+    const presenceMap = new Map(
+      (presenceRecords || []).map((p) => [p.user_id, p])
+    );
+
+    const onlineUsers = (profiles || []).map((profile) => {
+      const presence = presenceMap.get(profile.id);
+      return {
+        user_id: profile.id,
+        nickname: profile.nickname || 'Unknown',
+        is_online: presence?.is_online ?? true,
+        last_seen: presence?.last_seen ?? new Date().toISOString(),
+      };
+    });
 
     return success({
       online_users: onlineUsers,

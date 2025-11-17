@@ -25,7 +25,7 @@ export const useLikeMessage = () => {
 
         // API call
         const response = await apiClient.post(`/api/messages/${messageId}/like`);
-        const { liked, likeCount } = response.data.data;
+        const { liked, likeCount } = response.data;
 
         // Note: Optimistic update already done, no need to update again
         // The actual like count will be synced via long polling or next snapshot

@@ -2,7 +2,8 @@ import type { NetworkState, NetworkAction } from '../types';
 import { calculateBackoffDelay } from '../types';
 
 export const initialNetworkState: NetworkState = {
-  isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+  // Avoid reading navigator during SSR to keep HTML consistent
+  isOnline: true,
   syncStatus: 'idle',
   lastSyncAttempt: null,
   retryCount: 0,

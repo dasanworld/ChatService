@@ -116,6 +116,29 @@ export const createRoom = async (
       );
     }
 
+    // Check for duplicate room name for this user
+    const { data: existingRooms, error: checkError } = await client
+      .from('rooms')
+      .select('id, name')
+      .eq('name', roomName.trim())
+      .eq('created_by', userId);
+
+    if (checkError) {
+      return failure(
+        500,
+        roomListErrorCodes.CREATE_ROOM_FAILED,
+        checkError.message,
+      );
+    }
+
+    if (existingRooms && existingRooms.length > 0) {
+      return failure(
+        400,
+        roomListErrorCodes.DUPLICATE_ROOM_NAME,
+        '이미 같은 이름의 방이 존재합니다',
+      );
+    }
+
     // Create room
     const { data: room, error: createError } = await client
       .from('rooms')

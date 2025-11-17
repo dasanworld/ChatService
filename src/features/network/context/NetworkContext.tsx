@@ -45,6 +45,15 @@ export const NetworkProvider: React.FC<NetworkProviderProps> = ({
       dispatch({ type: 'NETWORK_OFFLINE' });
     };
 
+    // Align initial state with actual browser status after hydration
+    if (typeof navigator !== 'undefined') {
+      if (navigator.onLine) {
+        handleOnline();
+      } else {
+        handleOffline();
+      }
+    }
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 

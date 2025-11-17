@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { useActiveRoom } from '../context/ActiveRoomContext';
 import { apiClient, extractApiErrorMessage } from '@/lib/remote/api-client';
 import { useReadReceipts } from '@/features/read-receipt/hooks/useReadReceipts';
@@ -20,14 +20,20 @@ export const MessageList = ({ roomId }: MessageListProps) => {
     likedMessageIds,
     hasMoreHistory,
     isLoadingHistory,
+    isSnapshotLoaded,
     loadHistory,
   } = useActiveRoom();
 
   const { readStatuses } = useReadReceipts(roomId);
+  const [isMounted, setIsMounted] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Combine visible messages and pending messages for display
   const displayMessages = useMemo(() => {
@@ -75,7 +81,7 @@ export const MessageList = ({ roomId }: MessageListProps) => {
             },
           );
 
-          const { messages: newMessages, hasMore } = response.data.data;
+          const { messages: newMessages, hasMore } = response.data;
           loadHistory(newMessages, hasMore);
         } catch (error) {
           const msg = extractApiErrorMessage(error, '메시지 로드 실패');
@@ -90,13 +96,25 @@ export const MessageList = ({ roomId }: MessageListProps) => {
     [displayMessages, isLoadingHistory, hasMoreHistory, roomId, loadHistory],
   );
 
-  // Loading indicator
-  if (messages.length === 0 && pendingMessages.size === 0) {
+  // Loading indicator - show only until snapshot is loaded
+  if (!isMounted || !isSnapshotLoaded) {
     return (
       <div className="flex h-full items-center justify-center text-slate-500">
         <div className="text-center">
           <Loader className="mb-2 h-6 w-6 animate-spin mx-auto" />
           <p>메시지를 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state - snapshot loaded but no messages
+  if (messages.length === 0 && pendingMessages.size === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-slate-500">
+        <div className="text-center">
+          <p className="text-lg font-medium mb-2">아직 메시지가 없습니다</p>
+          <p className="text-sm">첫 메시지를 보내보세요!</p>
         </div>
       </div>
     );
@@ -121,7 +139,7 @@ export const MessageList = ({ roomId }: MessageListProps) => {
                     params: { beforeMessageId: firstMessage.id, limit: 50 },
                   })
                   .then((res) => {
-                    loadHistory(res.data.data.messages, res.data.data.hasMore);
+                    loadHistory(res.data.messages, res.data.hasMore);
                   });
               }
             }}

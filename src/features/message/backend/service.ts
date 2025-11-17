@@ -42,21 +42,21 @@ const getMessagesWithUser = async (
 
   // Fetch users separately
   const userIds = [...new Set(messages.map(m => m.user_id))];
-  const { data: users, error: usersError } = await client
-    .from('auth.users')
-    .select('id, user_metadata')
+  const { data: profiles, error: profilesError } = await client
+    .from('profiles')
+    .select('id, nickname, avatar_url')
     .in('id', userIds);
 
-  if (usersError) return null;
+  if (profilesError) return null;
 
   // Map user metadata to expected format
   const userMap = new Map(
-    (users || []).map(u => [
-      u.id,
+    (profiles || []).map((profile) => [
+      profile.id,
       {
-        id: u.id,
-        nickname: (u.user_metadata?.nickname as string) || 'Unknown',
-        avatar_url: (u.user_metadata?.avatar_url as string) || null,
+        id: profile.id,
+        nickname: profile.nickname || 'Unknown',
+        avatar_url: profile.avatar_url,
       },
     ])
   );
@@ -109,23 +109,23 @@ export const getRoomSnapshot = async (
 
     // Fetch users separately
     const userIds = [...new Set((messages || []).map(m => m.user_id))];
-    const { data: users, error: usersError } = await client
-      .from('auth.users')
-      .select('id, user_metadata')
+    const { data: profiles, error: profilesError } = await client
+      .from('profiles')
+      .select('id, nickname, avatar_url')
       .in('id', userIds);
 
-    if (usersError) {
-      return failure(500, messageErrorCodes.FETCH_SNAPSHOT_FAILED, usersError.message);
+    if (profilesError) {
+      return failure(500, messageErrorCodes.FETCH_SNAPSHOT_FAILED, profilesError.message);
     }
 
     // Map user metadata to expected format
     const userMap = new Map(
-      (users || []).map(u => [
-        u.id,
+      (profiles || []).map((profile) => [
+        profile.id,
         {
-          id: u.id,
-          nickname: (u.user_metadata?.nickname as string) || 'Unknown',
-          avatar_url: (u.user_metadata?.avatar_url as string) || null,
+          id: profile.id,
+          nickname: profile.nickname || 'Unknown',
+          avatar_url: profile.avatar_url,
         },
       ])
     );
@@ -387,23 +387,23 @@ export const getMessageHistory = async (
 
     // Fetch users separately
     const userIds = [...new Set(result.map(m => m.user_id))];
-    const { data: users, error: usersError } = await client
-      .from('auth.users')
-      .select('id, user_metadata')
+    const { data: profiles, error: profilesError } = await client
+      .from('profiles')
+      .select('id, nickname, avatar_url')
       .in('id', userIds);
 
-    if (usersError) {
-      return failure(500, messageErrorCodes.FETCH_HISTORY_FAILED, usersError.message);
+    if (profilesError) {
+      return failure(500, messageErrorCodes.FETCH_HISTORY_FAILED, profilesError.message);
     }
 
     // Map user metadata to expected format
     const userMap = new Map(
-      (users || []).map(u => [
-        u.id,
+      (profiles || []).map((profile) => [
+        profile.id,
         {
-          id: u.id,
-          nickname: (u.user_metadata?.nickname as string) || 'Unknown',
-          avatar_url: (u.user_metadata?.avatar_url as string) || null,
+          id: profile.id,
+          nickname: profile.nickname || 'Unknown',
+          avatar_url: profile.avatar_url,
         },
       ])
     );

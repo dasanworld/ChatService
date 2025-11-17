@@ -35,7 +35,7 @@ export const useReadReceipts = (roomId: string | null): UseReadReceiptsReturn =>
         `/api/rooms/${roomId}/read-status`,
       );
 
-      const { message_statuses } = response.data.data;
+      const { message_statuses } = response.data;
 
       // Convert to map for quick lookup
       const statusMap = new Map<string, MessageReadStatus>();
