@@ -44,13 +44,8 @@ export const withAuth = () =>
         }
       }
 
-      // Fallback to cookie-based auth
-      logger.info('🍪 Trying cookie-based authentication');
+      // Fallback to cookie-based auth (SSR supabase client has request cookies)
       const { data: { user }, error } = await supabase.auth.getUser();
-
-      if (error) {
-        logger.error('❌ Cookie auth error:', error.message);
-      }
 
       if (error || !user) {
         return c.json(

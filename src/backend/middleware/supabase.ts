@@ -1,5 +1,5 @@
 import { createMiddleware } from 'hono/factory';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
 import {
   contextKeys,
   type AppEnv,
@@ -21,14 +21,26 @@ export const withSupabase = () =>
       throw new Error('SUPABASE_SERVICE_ROLE_KEY is not defined');
     }
 
-    // Use service role key to avoid RLS-related 500s in API handlers
-    const client = createClient(
+    // Parse cookies for SSR auth support
+    const cookieHeader = c.req.header('cookie') || '';
+    const cookies = cookieHeader
+      .split(';')
+      .map((cookie) => cookie.trim())
+      .filter(Boolean)
+      .map((cookie) => {
+        const [name, ...rest] = cookie.split('=');
+        return { name, value: rest.join('=') };
+      });
+
+    const client = createServerClient(
       config.supabase.url,
       serviceRoleKey,
       {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
+        cookies: {
+          getAll: () => cookies,
+          setAll: () => {
+            // No-op on server
+          },
         },
       }
     );

@@ -41,7 +41,6 @@ export const createHonoApp = () => {
   app.use('/api/read-receipts*', withAuth());
   registerReadReceiptRoutes(app);
 
-  app.use('/api/invite*', withAuth());
   registerInviteRoutes(app);
 
   if (process.env.NODE_ENV === 'production') {
