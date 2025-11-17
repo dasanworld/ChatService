@@ -103,15 +103,23 @@ export const activeRoomReducer = (
     }
 
     case 'MESSAGE_REPLACE_PENDING': {
-      const newMessages = state.messages.map((msg) => {
-        if (msg.client_message_id === action.payload.clientMessageId) {
-          return action.payload.message;
-        }
-        return msg;
-      });
-
+      // Remove from pending
       const newPending = new Map(state.pendingMessages);
       newPending.delete(action.payload.clientMessageId);
+
+      // Add actual message to messages array
+      const newMessages = [...state.messages];
+      const existingIndex = newMessages.findIndex(
+        (m) => m.id === action.payload.message.id || m.client_message_id === action.payload.clientMessageId
+      );
+
+      if (existingIndex >= 0) {
+        // Replace existing message
+        newMessages[existingIndex] = action.payload.message;
+      } else {
+        // Add new message
+        newMessages.push(action.payload.message);
+      }
 
       return {
         ...state,
