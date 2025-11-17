@@ -143,15 +143,19 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-16">
-        <div className="flex items-center justify-between rounded-xl border border-slate-700 bg-slate-900/80 px-6 py-4">
-          <div className="text-sm font-medium text-slate-300">
-            SuperNext — 구조적인 Next.js + Supabase 템플릿
-          </div>
-          {authActions}
+    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white flex flex-col">
+      {/* Global Navigation */}
+      <nav className="border-b border-slate-700 bg-slate-900/80 px-6 py-4">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between">
+          <Link href="/" className="text-lg font-semibold text-slate-100">
+            ChatService
+          </Link>
+          <div>{authActions}</div>
         </div>
-        <header className="space-y-4">
+      </nav>
+
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-16 flex-1">
+        <header className="space-y-4 pt-0">
           <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
             SuperNext 프로젝트 설정 & 구조 안내서
           </h1>

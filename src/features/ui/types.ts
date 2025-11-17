@@ -6,6 +6,7 @@ export interface ModalState {
   leaveRoom: boolean;
   confirmDelete: boolean;
   chatRoom: boolean;
+  joinRoom: boolean;
 }
 
 /**

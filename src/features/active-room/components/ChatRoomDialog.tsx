@@ -162,7 +162,7 @@ export const ChatRoomDialog = () => {
           </div>
 
           {/* Input area */}
-          <div className="border-t border-slate-200 p-4">
+          <div className="p-4">
             {currentChatRoomId && <MessageInput roomId={currentChatRoomId} />}
           </div>
         </SheetContent>

@@ -6,6 +6,7 @@ export const initialUIState: UIState = {
     leaveRoom: false,
     confirmDelete: false,
     chatRoom: false,
+    joinRoom: false,
   },
   toasts: [],
   currentChatRoomId: null,
