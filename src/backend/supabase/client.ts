@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { env } from '@/constants/env';
+import { getAppConfig } from '@/backend/config';
 
 export type ServiceClientConfig = {
   url: string;
@@ -19,13 +19,10 @@ export const createServiceClient = ({
 
 // Create a function to get the service client with environment variables
 export const getSupabaseServiceClient = (): SupabaseClient => {
-  return createClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY,
-    {
-      auth: {
-        persistSession: false,
-      },
-    }
-  );
+  const config = getAppConfig();
+  return createClient(config.supabase.url, config.supabase.serviceRoleKey, {
+    auth: {
+      persistSession: false,
+    },
+  });
 };
