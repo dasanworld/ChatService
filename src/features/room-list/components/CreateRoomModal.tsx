@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useUI } from '@/features/ui/context/UIContext';
 import { useCreateRoom } from '../hooks/useCreateRoom';
 import { Button } from '@/components/ui/button';
@@ -17,8 +16,7 @@ import {
 import { Input } from '@/components/ui/input';
 
 export const CreateRoomModal = () => {
-  const router = useRouter();
-  const { closeModal, isModalOpen, showToast } = useUI();
+  const { closeModal, isModalOpen, showToast, openChatRoom } = useUI();
   const { mutate: createRoom, isPending } = useCreateRoom();
   const [roomName, setRoomName] = useState('');
 
@@ -39,8 +37,8 @@ export const CreateRoomModal = () => {
           showToast('success', '채팅방이 생성되었습니다', 3000);
           setRoomName('');
           closeModal('createRoom');
-          // Navigate to the new room
-          router.push(`/chat/${newRoom.id}`);
+          // Open chat dialog instead of navigating to a page
+          openChatRoom(newRoom.id);
         },
         onError: (error) => {
           const message =
