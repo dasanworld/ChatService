@@ -594,11 +594,27 @@ export const getUserLikedMessageIds = async (
       return failure(403, messageErrorCodes.NOT_ROOM_PARTICIPANT, '방의 참여자가 아닙니다');
     }
 
+    // Fetch message ids in the room first (avoid subquery in filter)
+    const { data: roomMessages, error: roomMessagesError } = await client
+      .from('messages')
+      .select('id')
+      .eq('room_id', roomId);
+
+    if (roomMessagesError) {
+      return failure(500, messageErrorCodes.FETCH_LIKES_FAILED, roomMessagesError.message);
+    }
+
+    const messageIds = (roomMessages || []).map((msg) => msg.id);
+
+    if (messageIds.length === 0) {
+      return success({ likedMessageIds: [] });
+    }
+
     const { data: likes, error: likesError } = await client
       .from('message_likes')
       .select('message_id')
       .eq('user_id', userId)
-      .in('message_id', client.from('messages').select('id').eq('room_id', roomId));
+      .in('message_id', messageIds);
 
     if (likesError) {
       return failure(500, messageErrorCodes.FETCH_LIKES_FAILED, likesError.message);
