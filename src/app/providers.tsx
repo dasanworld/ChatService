@@ -10,6 +10,8 @@ import {
 import { ThemeProvider } from "next-themes";
 import { UIProvider } from "@/features/ui/context/UIContext";
 import { RoomListProvider } from "@/features/room-list/context/RoomListContext";
+import { NetworkProvider } from "@/features/network/context/NetworkContext";
+import { ActiveRoomProvider } from "@/features/active-room/context/ActiveRoomContext";
 
 function makeQueryClient() {
   return new QueryClient({
@@ -55,11 +57,15 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange
     >
       <QueryClientProvider client={queryClient}>
-        <UIProvider>
-          <RoomListProvider>
-            {children}
-          </RoomListProvider>
-        </UIProvider>
+        <NetworkProvider>
+          <UIProvider>
+            <RoomListProvider>
+              <ActiveRoomProvider>
+                {children}
+              </ActiveRoomProvider>
+            </RoomListProvider>
+          </UIProvider>
+        </NetworkProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

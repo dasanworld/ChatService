@@ -32,16 +32,40 @@ const getMessagesWithUser = async (
 ): Promise<MessageWithUser[] | null> => {
   if (messageIds.length === 0) return [];
 
-  const { data: messages, error } = await client
+  // Fetch messages first
+  const { data: messages, error: messagesError } = await client
     .from('messages')
-    .select(
-      `id, room_id, user_id, content, reply_to_message_id, like_count, is_deleted, client_message_id, created_at, updated_at,
-       user:user_id(id, nickname:email, avatar_url)`,
-    )
+    .select('id, room_id, user_id, content, reply_to_message_id, like_count, is_deleted, client_message_id, created_at, updated_at')
     .in('id', messageIds);
 
-  if (error) return null;
-  return messages || [];
+  if (messagesError || !messages) return null;
+
+  // Fetch users separately
+  const userIds = [...new Set(messages.map(m => m.user_id))];
+  const { data: users, error: usersError } = await client
+    .from('auth.users')
+    .select('id, user_metadata')
+    .in('id', userIds);
+
+  if (usersError) return null;
+
+  // Map user metadata to expected format
+  const userMap = new Map(
+    (users || []).map(u => [
+      u.id,
+      {
+        id: u.id,
+        nickname: (u.user_metadata?.nickname as string) || 'Unknown',
+        avatar_url: (u.user_metadata?.avatar_url as string) || null,
+      },
+    ])
+  );
+
+  // Combine messages with user info
+  return messages.map(msg => ({
+    ...msg,
+    user: userMap.get(msg.user_id) || { id: msg.user_id, nickname: 'Unknown', avatar_url: null },
+  })) as MessageWithUser[];
 };
 
 /**
@@ -74,10 +98,7 @@ export const getRoomSnapshot = async (
     // Get messages for this room
     const { data: messages, error: messagesError } = await client
       .from('messages')
-      .select(
-        `id, room_id, user_id, content, reply_to_message_id, like_count, is_deleted, client_message_id, created_at, updated_at,
-         user:user_id(id, nickname:email, avatar_url)`,
-      )
+      .select('id, room_id, user_id, content, reply_to_message_id, like_count, is_deleted, client_message_id, created_at, updated_at')
       .eq('room_id', roomId)
       .order('created_at', { ascending: false })
       .limit(50);
@@ -86,8 +107,35 @@ export const getRoomSnapshot = async (
       return failure(500, messageErrorCodes.FETCH_SNAPSHOT_FAILED, messagesError.message);
     }
 
-    // Reverse to show chronological order (oldest first)
-    const reversedMessages = (messages || []).reverse();
+    // Fetch users separately
+    const userIds = [...new Set((messages || []).map(m => m.user_id))];
+    const { data: users, error: usersError } = await client
+      .from('auth.users')
+      .select('id, user_metadata')
+      .in('id', userIds);
+
+    if (usersError) {
+      return failure(500, messageErrorCodes.FETCH_SNAPSHOT_FAILED, usersError.message);
+    }
+
+    // Map user metadata to expected format
+    const userMap = new Map(
+      (users || []).map(u => [
+        u.id,
+        {
+          id: u.id,
+          nickname: (u.user_metadata?.nickname as string) || 'Unknown',
+          avatar_url: (u.user_metadata?.avatar_url as string) || null,
+        },
+      ])
+    );
+
+    // Combine messages with user info and reverse to show chronological order (oldest first)
+    const messagesWithUsers = (messages || []).map(msg => ({
+      ...msg,
+      user: userMap.get(msg.user_id) || { id: msg.user_id, nickname: 'Unknown', avatar_url: null },
+    })) as MessageWithUser[];
+    const reversedMessages = messagesWithUsers.reverse();
 
     return success({
       room_id: roomId,
@@ -256,16 +304,9 @@ export const getLongPollingUpdates = async (
 
     let messagesMap: Record<string, MessageWithUser> = {};
     if (messageIds.length > 0) {
-      const { data: messages } = await client
-        .from('messages')
-        .select(
-          `id, room_id, user_id, content, reply_to_message_id, like_count, is_deleted, client_message_id, created_at, updated_at,
-           user:user_id(id, nickname:email, avatar_url)`,
-        )
-        .in('id', messageIds);
-
-      if (messages) {
-        messagesMap = Object.fromEntries(messages.map((m) => [m.id, m]));
+      const messagesWithUser = await getMessagesWithUser(client, messageIds);
+      if (messagesWithUser) {
+        messagesMap = Object.fromEntries(messagesWithUser.map((m) => [m.id, m]));
       }
     }
 
@@ -318,10 +359,7 @@ export const getMessageHistory = async (
 
     let query = client
       .from('messages')
-      .select(
-        `id, room_id, user_id, content, reply_to_message_id, like_count, is_deleted, client_message_id, created_at, updated_at,
-         user:user_id(id, nickname:email, avatar_url)`,
-      )
+      .select('id, room_id, user_id, content, reply_to_message_id, like_count, is_deleted, client_message_id, created_at, updated_at')
       .eq('room_id', roomId)
       .order('created_at', { ascending: false });
 
@@ -347,12 +385,41 @@ export const getMessageHistory = async (
     const hasMore = (messages?.length ?? 0) > limit;
     const result = hasMore ? messages!.slice(0, limit) : messages || [];
 
+    // Fetch users separately
+    const userIds = [...new Set(result.map(m => m.user_id))];
+    const { data: users, error: usersError } = await client
+      .from('auth.users')
+      .select('id, user_metadata')
+      .in('id', userIds);
+
+    if (usersError) {
+      return failure(500, messageErrorCodes.FETCH_HISTORY_FAILED, usersError.message);
+    }
+
+    // Map user metadata to expected format
+    const userMap = new Map(
+      (users || []).map(u => [
+        u.id,
+        {
+          id: u.id,
+          nickname: (u.user_metadata?.nickname as string) || 'Unknown',
+          avatar_url: (u.user_metadata?.avatar_url as string) || null,
+        },
+      ])
+    );
+
+    // Combine messages with user info
+    const messagesWithUsers = result.map(msg => ({
+      ...msg,
+      user: userMap.get(msg.user_id) || { id: msg.user_id, nickname: 'Unknown', avatar_url: null },
+    })) as MessageWithUser[];
+
     // Reverse to show chronological order
-    result.reverse();
+    messagesWithUsers.reverse();
 
     return success({
-      messages: result,
-      total: result.length,
+      messages: messagesWithUsers,
+      total: messagesWithUsers.length,
       hasMore,
     });
   } catch (error) {
