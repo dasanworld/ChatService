@@ -4,6 +4,8 @@ import React, {
   createContext,
   useContext,
   useReducer,
+  useCallback,
+  useMemo,
   ReactNode,
 } from 'react';
 import type { RoomListState, RoomListAction, Room } from '../types';
@@ -15,6 +17,13 @@ import {
 interface RoomListContextType {
   state: RoomListState;
   dispatch: React.Dispatch<RoomListAction>;
+  // Memoized action creators
+  fetchStart: () => void;
+  fetchSuccess: (rooms: Room[]) => void;
+  fetchError: (error: string) => void;
+  addRoom: (room: Room) => void;
+  removeRoom: (roomId: string) => void;
+  resetError: () => void;
 }
 
 const RoomListContext = createContext<RoomListContextType | undefined>(
@@ -33,8 +42,45 @@ export const RoomListProvider: React.FC<RoomListProviderProps> = ({
     initialRoomListState,
   );
 
+  // Memoize action creators to prevent infinite loops
+  const fetchStart = useCallback(() => {
+    dispatch({ type: 'FETCH_START' });
+  }, []);
+
+  const fetchSuccess = useCallback((rooms: Room[]) => {
+    dispatch({ type: 'FETCH_SUCCESS', payload: rooms });
+  }, []);
+
+  const fetchError = useCallback((error: string) => {
+    dispatch({ type: 'FETCH_ERROR', payload: error });
+  }, []);
+
+  const addRoom = useCallback((room: Room) => {
+    dispatch({ type: 'ADD_ROOM', payload: room });
+  }, []);
+
+  const removeRoom = useCallback((roomId: string) => {
+    dispatch({ type: 'REMOVE_ROOM', payload: roomId });
+  }, []);
+
+  const resetError = useCallback(() => {
+    dispatch({ type: 'RESET_ERROR' });
+  }, []);
+
+  // Memoize context value
+  const value = useMemo<RoomListContextType>(() => ({
+    state,
+    dispatch,
+    fetchStart,
+    fetchSuccess,
+    fetchError,
+    addRoom,
+    removeRoom,
+    resetError,
+  }), [state, fetchStart, fetchSuccess, fetchError, addRoom, removeRoom, resetError]);
+
   return (
-    <RoomListContext.Provider value={{ state, dispatch }}>
+    <RoomListContext.Provider value={value}>
       {children}
     </RoomListContext.Provider>
   );
@@ -52,7 +98,7 @@ export const useRoomList = () => {
     );
   }
 
-  const { state, dispatch } = context;
+  const { state, fetchStart, fetchSuccess, fetchError, addRoom, removeRoom, resetError } = context;
 
   return {
     // State
@@ -62,16 +108,12 @@ export const useRoomList = () => {
     isLoading: state.status === 'loading',
     isEmpty: state.rooms.length === 0,
 
-    // Actions
-    fetchStart: () => dispatch({ type: 'FETCH_START' }),
-    fetchSuccess: (rooms: Room[]) =>
-      dispatch({ type: 'FETCH_SUCCESS', payload: rooms }),
-    fetchError: (error: string) =>
-      dispatch({ type: 'FETCH_ERROR', payload: error }),
-    addRoom: (room: Room) =>
-      dispatch({ type: 'ADD_ROOM', payload: room }),
-    removeRoom: (roomId: string) =>
-      dispatch({ type: 'REMOVE_ROOM', payload: roomId }),
-    resetError: () => dispatch({ type: 'RESET_ERROR' }),
+    // Memoized actions
+    fetchStart,
+    fetchSuccess,
+    fetchError,
+    addRoom,
+    removeRoom,
+    resetError,
   };
 };

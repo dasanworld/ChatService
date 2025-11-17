@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import type { AppEnv } from '@/backend/hono/context';
+import { getUser } from '@/backend/hono/context';
 import { respond } from '@/backend/http/response';
+import { withAuth } from '@/backend/middleware/auth';
 import { getRoomsByUserId, createRoom, leaveRoom } from './service';
 import {
   CreateRoomRequestSchema,
@@ -10,21 +12,22 @@ import {
 
 export const registerRoomListRoutes = (app: Hono<AppEnv>) => {
   // GET /api/rooms - Get all rooms for current user
-  app.get('/api/rooms', async (c) => {
+  app.get('/api/rooms', withAuth(), async (c) => {
     const supabase = c.get('supabase');
+    const user = getUser(c);
 
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return respond(c, {
-        ok: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          statusCode: 401,
-          message: 'Unauthorized',
+    if (!user) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'UNAUTHORIZED',
+            statusCode: 401,
+            message: 'Unauthorized',
+          },
         },
-      } as any);
+        401
+      );
     }
 
     const result = await getRoomsByUserId(supabase, user.id);
@@ -34,22 +37,24 @@ export const registerRoomListRoutes = (app: Hono<AppEnv>) => {
   // POST /api/rooms - Create a new room
   app.post(
     '/api/rooms',
+    withAuth(),
     zValidator('json', CreateRoomRequestSchema),
     async (c) => {
       const supabase = c.get('supabase');
+      const user = getUser(c);
 
-      // Get current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        return respond(c, {
-          ok: false,
-          error: {
-            code: 'UNAUTHORIZED',
-            statusCode: 401,
-            message: 'Unauthorized',
+      if (!user) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'UNAUTHORIZED',
+              statusCode: 401,
+              message: 'Unauthorized',
+            },
           },
-        } as any);
+          401
+        );
       }
 
       const { name } = c.req.valid('json');
@@ -59,22 +64,23 @@ export const registerRoomListRoutes = (app: Hono<AppEnv>) => {
   );
 
   // DELETE /api/rooms/:roomId - Leave a room
-  app.delete('/api/rooms/:roomId', async (c) => {
+  app.delete('/api/rooms/:roomId', withAuth(), async (c) => {
     const supabase = c.get('supabase');
+    const user = getUser(c);
     const roomId = c.req.param('roomId');
 
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return respond(c, {
-        ok: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          statusCode: 401,
-          message: 'Unauthorized',
+    if (!user) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'UNAUTHORIZED',
+            statusCode: 401,
+            message: 'Unauthorized',
+          },
         },
-      } as any);
+          401
+      );
     }
 
     const result = await leaveRoom(supabase, user.id, roomId);

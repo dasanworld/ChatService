@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { apiClient, extractApiErrorMessage, isAxiosError } from '@/lib/remote/api-client';
+import { getSupabaseBrowserClient } from '@/lib/supabase/browser-client';
 import { useCurrentUser } from './useCurrentUser';
 import type { LoginFormData } from '../schemas/login';
 
@@ -19,6 +20,18 @@ export const useLogin = () => {
       setErrorMessage(null);
 
       try {
+        // First, authenticate with Supabase client directly
+        const supabase = getSupabaseBrowserClient();
+        const { error: authError } = await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
+        });
+
+        if (authError) {
+          throw authError;
+        }
+
+        // Call backend API to sync session
         await apiClient.post('/api/auth/login', {
           email: data.email,
           password: data.password,
