@@ -8,6 +8,7 @@ import { useActiveRoom } from '../context/ActiveRoomContext';
 import { useLikeMessage } from '../hooks/useLikeMessage';
 import { apiClient, extractApiErrorMessage } from '@/lib/remote/api-client';
 import { ReadReceipt } from '@/features/read-receipt/components/ReadReceipt';
+import { useCurrentUser } from '@/features/auth/hooks/useCurrentUser';
 import type { MessageWithUser } from '@/features/message/backend/schema';
 import type { MessageReadStatus } from '@/features/read-receipt/backend/schema';
 
@@ -28,8 +29,10 @@ export const MessageItem = ({
 }: MessageItemProps) => {
   const { setReplyTarget, hideMessage } = useActiveRoom();
   const { likeMessage, isLiking } = useLikeMessage();
+  const { user } = useCurrentUser();
   const [showActions, setShowActions] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const isMine = user?.id === message.user_id;
 
   const handleReply = () => {
     setReplyTarget(message);
@@ -85,18 +88,32 @@ export const MessageItem = ({
       data-message-id={message.id}
       className={`flex gap-3 px-4 py-2 transition-colors ${
         isPending ? 'opacity-75' : ''
-      } hover:bg-slate-50`}
+      } bg-white`}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
       {/* Avatar placeholder */}
-      <div className="h-8 w-8 flex-shrink-0 rounded-full bg-slate-300" />
+      <div
+        className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
+          isMine
+            ? 'border-slate-300 bg-white text-slate-700'
+            : 'border-amber-200 bg-amber-100 text-amber-800'
+        }`}
+      >
+        {(message.user.nickname || '?').slice(0, 1).toUpperCase()}
+      </div>
 
       {/* Message content */}
       <div className="flex-1 min-w-0">
         {/* Header: name + time */}
         <div className="flex items-center gap-2">
-          <p className="font-medium text-slate-900">{message.user.nickname}</p>
+          <p
+            className={`font-medium ${
+              isMine ? 'text-slate-900' : 'text-amber-900'
+            }`}
+          >
+            {message.user.nickname}
+          </p>
           <span className="text-xs text-slate-500">
             {formatDistanceToNow(new Date(message.created_at), {
               addSuffix: true,
