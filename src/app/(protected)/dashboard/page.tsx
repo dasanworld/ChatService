@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useCurrentUser } from "@/features/auth/hooks/useCurrentUser";
+import { useUI } from "@/features/ui/context/UIContext";
+import { RoomList } from "@/features/room-list/components/RoomList";
+import { CreateRoomModal } from "@/features/room-list/components/CreateRoomModal";
+import { LeaveRoomModal } from "@/features/room-list/components/LeaveRoomModal";
+import { MessageSquarePlus } from "lucide-react";
 
 type DashboardPageProps = {
   params: Promise<Record<string, never>>;
@@ -12,6 +16,7 @@ type DashboardPageProps = {
 export default function DashboardPage({ params }: DashboardPageProps) {
   void params;
   const { user, logout } = useCurrentUser();
+  const { openModal } = useUI();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
@@ -25,10 +30,11 @@ export default function DashboardPage({ params }: DashboardPageProps) {
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-12">
+      {/* Header */}
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-2">
-          <h1 className="text-3xl font-semibold">대시보드</h1>
-          <p className="text-slate-500">
+          <h1 className="text-3xl font-bold tracking-tight">대시보드</h1>
+          <p className="mt-2 text-gray-600">
             {user?.email ?? "알 수 없는 사용자"} 님, 환영합니다.
           </p>
         </div>
@@ -41,30 +47,34 @@ export default function DashboardPage({ params }: DashboardPageProps) {
           {isLoggingOut ? "로그아웃 중..." : "로그아웃"}
         </Button>
       </header>
-      <div className="overflow-hidden rounded-xl border border-slate-200">
-        <Image
-          alt="대시보드"
-          src="https://picsum.photos/seed/dashboard/960/420"
-          width={960}
-          height={420}
-          className="h-auto w-full object-cover"
-        />
-      </div>
-      <section className="grid gap-4 md:grid-cols-2">
-        <article className="rounded-lg border border-slate-200 p-4">
-          <h2 className="text-lg font-medium">현재 세션</h2>
-          <p className="mt-2 text-sm text-slate-500">
-            Supabase 미들웨어가 세션 쿠키를 자동으로 동기화합니다.
-          </p>
-        </article>
-        <article className="rounded-lg border border-slate-200 p-4">
-          <h2 className="text-lg font-medium">보안 체크</h2>
-          <p className="mt-2 text-sm text-slate-500">
-            보호된 App Router 세그먼트로 라우팅되며, 로그인 사용
-            자만 접근할 수 있습니다.
-          </p>
-        </article>
+
+      {/* Room List Section */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">
+              내 채팅방
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              참여 중인 채팅방 목록입니다.
+            </p>
+          </div>
+          <Button
+            onClick={() => openModal("createRoom")}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <MessageSquarePlus className="h-4 w-4" />
+            <span className="ml-2">새 채팅방</span>
+          </Button>
+        </div>
+
+        {/* Room List */}
+        <RoomList />
       </section>
+
+      {/* Modals */}
+      <CreateRoomModal />
+      <LeaveRoomModal />
     </div>
   );
 }

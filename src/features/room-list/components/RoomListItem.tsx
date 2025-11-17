@@ -1,0 +1,63 @@
+'use client';
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useUI } from '@/features/ui/context/UIContext';
+import { Button } from '@/components/ui/button';
+import { MessageCircle, Users, LogOut } from 'lucide-react';
+import type { Room } from '../types';
+
+interface RoomListItemProps {
+  room: Room;
+}
+
+export const RoomListItem = ({ room }: RoomListItemProps) => {
+  const router = useRouter();
+  const { openModal } = useUI();
+
+  const handleLeaveClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // Store room ID in sessionStorage for modal to access
+    sessionStorage.setItem('leave_room_id', room.id);
+    openModal('leaveRoom');
+  };
+
+  return (
+    <Link
+      href={`/chat/${room.id}`}
+      className="block rounded-lg border border-slate-200 p-4 transition-all hover:border-slate-300 hover:shadow-md"
+    >
+      <div className="flex items-start justify-between gap-4">
+        {/* Room info */}
+        <div className="flex-1 space-y-2">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <MessageCircle className="h-5 w-5 text-blue-500" />
+            {room.name}
+          </h3>
+          <div className="flex items-center gap-4 text-sm text-slate-600">
+            <span className="flex items-center gap-1">
+              <Users className="h-4 w-4" />
+              {room.participant_count ?? 0}명
+            </span>
+            <span className="text-slate-500">
+              {new Date(room.created_at).toLocaleDateString('ko-KR')}
+            </span>
+          </div>
+        </div>
+
+        {/* Leave button */}
+        <div className="flex flex-col gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleLeaveClick}
+            className="text-red-600 hover:bg-red-50 hover:text-red-700"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="ml-1 hidden sm:inline">나가기</span>
+          </Button>
+        </div>
+      </div>
+    </Link>
+  );
+};
