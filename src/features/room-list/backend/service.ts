@@ -18,6 +18,14 @@ export const getRoomsByUserId = async (
   userId: string,
 ): Promise<HandlerResult<GetRoomsResponse, RoomListErrorCode, unknown>> => {
   try {
+    if (!userId) {
+      return failure(
+        401,
+        roomListErrorCodes.FETCH_ROOMS_FAILED,
+        'Missing user id',
+      );
+    }
+
     // Get all rooms where user is a participant
     const { data: participantRooms, error: participantError } = await client
       .from('room_participants')

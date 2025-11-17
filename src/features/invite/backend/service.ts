@@ -13,33 +13,55 @@ export const verifyInviteToken = async (
   client: SupabaseClient,
   token: string,
 ): Promise<HandlerResult<InviteInfo, InviteErrorCode, unknown>> => {
-  // Token is actually room_id (simple approach)
-  const { data: room, error: roomError } = await client
-    .from('rooms')
-    .select('id, name')
-    .eq('id', token)
-    .maybeSingle();
+  try {
+    // Token is actually room_id (simple approach)
+    const { data: room, error: roomError } = await client
+      .from('rooms')
+      .select('id, name')
+      .eq('id', token)
+      .maybeSingle();
 
-  if (roomError || !room) {
-    return failure(404, inviteErrorCodes.ROOM_NOT_FOUND, 'Room not found');
+    if (roomError) {
+      return failure(
+        500,
+        inviteErrorCodes.JOIN_ERROR,
+        roomError.message || '방 정보를 조회할 수 없습니다',
+      );
+    }
+
+    if (!room) {
+      return failure(404, inviteErrorCodes.ROOM_NOT_FOUND, 'Room not found');
+    }
+
+    // Get participant count
+    const { count, error: countError } = await client
+      .from('room_participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('room_id', room.id);
+
+    if (countError) {
+      return failure(
+        500,
+        inviteErrorCodes.JOIN_ERROR,
+        countError.message || '참여자 수를 조회할 수 없습니다',
+      );
+    }
+
+    return success({
+      roomId: room.id,
+      roomName: room.name,
+      participantCount: count ?? 0,
+      valid: true,
+    });
+  } catch (error) {
+    return failure(
+      500,
+      inviteErrorCodes.JOIN_ERROR,
+      error instanceof Error && error.message
+        ? error.message
+        : 'Invite verification failed',
+    );
   }
-
-  // Get participant count
-  const { count, error: countError } = await client
-    .from('room_participants')
-    .select('*', { count: 'exact', head: true })
-    .eq('room_id', room.id);
-
-  if (countError) {
-    return failure(500, inviteErrorCodes.JOIN_ERROR, countError.message);
-  }
-
-  return success({
-    roomId: room.id,
-    roomName: room.name,
-    participantCount: count ?? 0,
-    valid: true,
-  });
 };
 
 export const addUserToRoom = async (

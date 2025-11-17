@@ -15,14 +15,26 @@ import {
   CreateMessageRequestSchema,
 } from './schema';
 
+const getAuthUser = async (supabase: any, authHeader?: string) => {
+  const bearer =
+    authHeader && authHeader.startsWith('Bearer ')
+      ? authHeader.substring(7)
+      : undefined;
+  const { data: { user }, error } = bearer
+    ? await supabase.auth.getUser(bearer)
+    : await supabase.auth.getUser();
+  return { user, error };
+};
+
 export const registerMessageRoutes = (app: Hono<AppEnv>) => {
   // GET /api/rooms/:roomId - Get room snapshot (initial messages)
   app.get('/api/rooms/:roomId', async (c) => {
     const supabase = c.get('supabase');
     const roomId = c.req.param('roomId');
+    const authHeader = c.req.header('authorization');
 
     // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { user, error: userError } = await getAuthUser(supabase, authHeader);
 
     if (userError || !user) {
       return respond(c, {
@@ -46,9 +58,10 @@ export const registerMessageRoutes = (app: Hono<AppEnv>) => {
     async (c) => {
       const supabase = c.get('supabase');
       const roomId = c.req.param('roomId');
+      const authHeader = c.req.header('authorization');
 
       // Get current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const { user, error: userError } = await getAuthUser(supabase, authHeader);
 
       if (userError || !user) {
         return respond(c, {
@@ -79,9 +92,10 @@ export const registerMessageRoutes = (app: Hono<AppEnv>) => {
     const supabase = c.get('supabase');
     const roomId = c.req.param('roomId');
     const sinceVersion = parseInt(c.req.query('sinceVersion') || '0', 10);
+    const authHeader = c.req.header('authorization');
 
     // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { user, error: userError } = await getAuthUser(supabase, authHeader);
 
     if (userError || !user) {
       return respond(c, {
@@ -104,9 +118,10 @@ export const registerMessageRoutes = (app: Hono<AppEnv>) => {
     const roomId = c.req.param('roomId');
     const beforeMessageId = c.req.query('beforeMessageId');
     const limit = parseInt(c.req.query('limit') || '50', 10);
+    const authHeader = c.req.header('authorization');
 
     // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { user, error: userError } = await getAuthUser(supabase, authHeader);
 
     if (userError || !user) {
       return respond(c, {
@@ -134,9 +149,10 @@ export const registerMessageRoutes = (app: Hono<AppEnv>) => {
     const supabase = c.get('supabase');
     const messageId = c.req.param('messageId');
     const deleteForAll = c.req.query('deleteForAll') === 'true';
+    const authHeader = c.req.header('authorization');
 
     // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { user, error: userError } = await getAuthUser(supabase, authHeader);
 
     if (userError || !user) {
       return respond(c, {
@@ -157,9 +173,10 @@ export const registerMessageRoutes = (app: Hono<AppEnv>) => {
   app.post('/api/messages/:messageId/like', async (c) => {
     const supabase = c.get('supabase');
     const messageId = c.req.param('messageId');
+    const authHeader = c.req.header('authorization');
 
     // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { user, error: userError } = await getAuthUser(supabase, authHeader);
 
     if (userError || !user) {
       return respond(c, {
@@ -180,9 +197,10 @@ export const registerMessageRoutes = (app: Hono<AppEnv>) => {
   app.get('/api/rooms/:roomId/likes', async (c) => {
     const supabase = c.get('supabase');
     const roomId = c.req.param('roomId');
+    const authHeader = c.req.header('authorization');
 
     // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { user, error: userError } = await getAuthUser(supabase, authHeader);
 
     if (userError || !user) {
       return respond(c, {

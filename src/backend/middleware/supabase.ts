@@ -1,5 +1,5 @@
 import { createMiddleware } from 'hono/factory';
-import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import {
   contextKeys,
   type AppEnv,
@@ -16,44 +16,19 @@ export const withSupabase = () =>
       throw new Error('Application configuration is not available.');
     }
 
-    // Get anon key from environment
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    
-    if (!anonKey) {
-      throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is not defined');
+    const serviceRoleKey = config.supabase.serviceRoleKey;
+    if (!serviceRoleKey) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY is not defined');
     }
 
-    // Parse cookies from request headers
-    const cookieHeader = c.req.header('cookie') || '';
-    
-    logger.info('Cookie header:', cookieHeader ? 'present' : 'missing');
-
-    const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
-      const trimmed = cookie.trim();
-      const equalIndex = trimmed.indexOf('=');
-      if (equalIndex > 0) {
-        const key = trimmed.substring(0, equalIndex);
-        const value = trimmed.substring(equalIndex + 1);
-        acc.push({ name: key, value: value }); // Don't decode yet, let Supabase handle it
-      }
-      return acc;
-    }, [] as Array<{ name: string; value: string }>);
-
-    logger.info('Parsed cookies count:', cookies.length);
-    logger.info('Auth cookie present:', cookies.some(c => c.name.includes('auth-token')));
-
-    // Create Supabase client with SSR support
-    const client = createServerClient(
+    // Use service role key to avoid RLS-related 500s in API handlers
+    const client = createClient(
       config.supabase.url,
-      anonKey,
+      serviceRoleKey,
       {
-        cookies: {
-          getAll: () => {
-            return cookies;
-          },
-          setAll: () => {
-            // No-op for now - Hono handles response cookies differently
-          },
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
         },
       }
     );

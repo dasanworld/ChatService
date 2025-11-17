@@ -23,7 +23,7 @@ import { UserPlus, RefreshCw } from 'lucide-react';
 
 export const ChatRoomDialog = () => {
   const { modals, currentChatRoomId, closeChatRoom } = useUI();
-  const { setRoom, clearRoom } = useActiveRoom();
+  const { setRoom, clearRoom, visibleMessages } = useActiveRoom();
   const { onlineUsers } = usePresence(currentChatRoomId);
   const { rooms } = useRoomList();
   const { user } = useCurrentUser();
@@ -158,7 +158,7 @@ export const ChatRoomDialog = () => {
 
           {/* Messages area */}
           <div className="flex flex-1 flex-col overflow-hidden">
-            {currentChatRoomId && <MessageList roomId={currentChatRoomId} />}
+            {currentChatRoomId && visibleMessages && <MessageList roomId={currentChatRoomId} />}
           </div>
 
           {/* Input area */}

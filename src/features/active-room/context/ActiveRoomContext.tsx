@@ -205,16 +205,19 @@ export const useActiveRoom = () => {
     dispatch({ type: 'RESET' });
   }, [dispatch]);
 
+  const safeMessages = state?.messages ?? [];
+  const safeHidden = state?.hiddenMessageIds ?? new Set<string>();
+
   return {
     // State
     roomId: state.roomId,
-    messages: state.messages,
+    messages: safeMessages,
     pendingMessages: state.pendingMessages,
     lastSyncVersion: state.lastSyncVersion,
     pollingStatus: state.pollingStatus,
     pollingError: state.pollingError,
     likedMessageIds: state.likedMessageIds,
-    hiddenMessageIds: state.hiddenMessageIds,
+    hiddenMessageIds: safeHidden,
     replyTarget: state.replyTarget,
     hasMoreHistory: state.hasMoreHistory,
     isLoadingHistory: state.isLoadingHistory,
@@ -224,8 +227,8 @@ export const useActiveRoom = () => {
     isLive: state.pollingStatus === 'live',
     isCatchup: state.pollingStatus === 'catchup',
     hasError: state.pollingStatus === 'error',
-    visibleMessages: state.messages.filter(
-      (msg) => !state.hiddenMessageIds.has(msg.id),
+    visibleMessages: safeMessages.filter(
+      (msg) => !safeHidden.has(msg.id),
     ),
 
     // Actions

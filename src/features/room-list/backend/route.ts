@@ -14,24 +14,38 @@ export const registerRoomListRoutes = (app: Hono<AppEnv>) => {
   // GET /api/rooms - Get all rooms for current user
   app.get('/api/rooms', withAuth(), async (c) => {
     const supabase = c.get('supabase');
+    const logger = c.get('logger');
     const user = getUser(c);
 
-    if (!user) {
+    try {
+      if (!user) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'UNAUTHORIZED',
+              statusCode: 401,
+              message: 'Unauthorized',
+            },
+          },
+          401
+        );
+      }
+
+      const result = await getRoomsByUserId(supabase, user.id);
+      return respond(c, result);
+    } catch (error) {
+      logger.error?.('[rooms] unexpected error', error);
       return c.json(
         {
-          ok: false,
           error: {
-            code: 'UNAUTHORIZED',
-            statusCode: 401,
-            message: 'Unauthorized',
+            code: 'INTERNAL_SERVER_ERROR',
+            message: error instanceof Error ? error.message : 'unknown error',
           },
         },
-        401
+        500,
       );
     }
-
-    const result = await getRoomsByUserId(supabase, user.id);
-    return respond(c, result);
   });
 
   // POST /api/rooms - Create a new room

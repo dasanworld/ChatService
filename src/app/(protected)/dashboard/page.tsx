@@ -52,6 +52,9 @@ export default function DashboardPage({ params }: DashboardPageProps) {
             ChatService
           </Link>
           <div className="flex items-center gap-3">
+            <Link href="/" className="text-sm text-slate-600 hover:text-slate-900 transition">
+              홈
+            </Link>
             <span className="text-sm text-slate-600">
               {user?.email ?? "알 수 없는 사용자"}
             </span>

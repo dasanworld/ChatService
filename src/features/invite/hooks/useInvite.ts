@@ -25,6 +25,15 @@ export const useInvite = (token: string) => {
     try {
       const verifyResponse = await apiClient.get(`/api/invites/${token}`);
 
+      // 서버 에러 응답 처리
+      if ('error' in verifyResponse.data) {
+        const message =
+          (verifyResponse.data as any).error?.message ||
+          '초대 코드 검증에 실패했습니다';
+        setState({ status: 'error', message });
+        return;
+      }
+
       const inviteInfo = verifyResponse.data;
 
       // Step 2: Check authentication
@@ -43,15 +52,21 @@ export const useInvite = (token: string) => {
       setState({ status: 'joining' });
       const joinResponse = await apiClient.post(`/api/invites/${token}/join`);
 
-      if (joinResponse.status === 200) {
-        // Step 4: Store room ID and redirect to dashboard
-        sessionStorage.removeItem('invite_token');
-        sessionStorage.setItem('open_chat_room', inviteInfo.roomId);
-        setState({ status: 'success', roomId: inviteInfo.roomId });
-        router.replace('/dashboard');
+      if ('error' in joinResponse.data) {
+        const message =
+          (joinResponse.data as any).error?.message ||
+          '방 참여에 실패했습니다';
+        setState({ status: 'error', message });
+        return;
       }
+
+      // Step 4: Store room ID and redirect to dashboard
+      sessionStorage.removeItem('invite_token');
+      sessionStorage.setItem('open_chat_room', inviteInfo.roomId);
+      setState({ status: 'success', roomId: inviteInfo.roomId });
+      router.replace('/dashboard');
     } catch (error) {
-      const message = extractApiErrorMessage(error, '유효하지 않은 초대 링크입니다');
+      const message = extractApiErrorMessage(error, `유효하지 않은 초대 링크입니다: ${token}`);
       setState({ status: 'error', message });
     }
   }, [token, isAuthenticated, authLoading, router]);
