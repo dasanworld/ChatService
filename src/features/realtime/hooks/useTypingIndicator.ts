@@ -41,7 +41,6 @@ export const useTypingIndicator = (roomId: string | null): UseTypingIndicatorRet
       setTypingUsers(typing_users || []);
     } catch (error) {
       // Silently fail for polling
-      console.debug('Failed to fetch typing users');
     }
   }, [roomId]);
 
@@ -57,7 +56,6 @@ export const useTypingIndicator = (roomId: string | null): UseTypingIndicatorRet
       });
     } catch (error) {
       // Silently fail
-      console.debug('Failed to update typing status');
     }
   }, [roomId]);
 

@@ -10,6 +10,8 @@ import { usePresence } from '@/features/realtime/hooks/usePresence';
 import { UserPresenceDisplay } from '@/features/realtime/components/UserPresence';
 import { InviteDialog } from '@/features/invite/components/InviteDialog';
 import { useUI } from '@/features/ui/context/UIContext';
+import { useRoomList } from '@/features/room-list/context/RoomListContext';
+import { useCurrentUser } from '@/features/auth/hooks/useCurrentUser';
 import {
   Sheet,
   SheetContent,
@@ -23,6 +25,8 @@ export const ChatRoomDialog = () => {
   const { modals, currentChatRoomId, closeChatRoom } = useUI();
   const { setRoom, clearRoom } = useActiveRoom();
   const { onlineUsers } = usePresence(currentChatRoomId);
+  const { rooms } = useRoomList();
+  const { user } = useCurrentUser();
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [width, setWidth] = useState(768); // Default width in pixels
@@ -32,6 +36,13 @@ export const ChatRoomDialog = () => {
 
   // Start Long Polling when room is open
   useLongPolling(currentChatRoomId);
+
+  const currentRoom = rooms.find((room) => room.id === currentChatRoomId);
+  const roomTitle = currentRoom?.name ?? '채팅방';
+  const userLabel =
+    (typeof user?.userMetadata?.nickname === 'string' && user.userMetadata.nickname) ||
+    user?.email ||
+    '알 수 없는 사용자';
 
   // Set/clear room when dialog opens/closes
   useEffect(() => {
@@ -106,7 +117,15 @@ export const ChatRoomDialog = () => {
           <SheetHeader className="border-b border-slate-200 px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <SheetTitle className="text-xl font-semibold">채팅방</SheetTitle>
+                <SheetTitle className="text-xl font-semibold">
+                  {roomTitle}
+                </SheetTitle>
+                <div className="flex flex-col text-left leading-tight">
+                  <span className="text-xs text-slate-500">참여자</span>
+                  <span className="text-sm font-medium text-slate-700">
+                    {userLabel}
+                  </span>
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -116,11 +135,6 @@ export const ChatRoomDialog = () => {
                 >
                   <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                 </Button>
-                {currentChatRoomId && (
-                  <p className="text-xs text-slate-500">
-                    {currentChatRoomId}
-                  </p>
-                )}
               </div>
               <div className="flex items-center gap-2">
                 <Button

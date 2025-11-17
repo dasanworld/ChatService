@@ -41,7 +41,6 @@ export const usePresence = (roomId: string | null): UsePresenceReturn => {
       setOnlineUsers(online_users || []);
     } catch (error) {
       // Silently fail for polling
-      console.debug('Failed to fetch presence');
     }
   }, [roomId]);
 
@@ -57,7 +56,6 @@ export const usePresence = (roomId: string | null): UsePresenceReturn => {
       });
     } catch (error) {
       // Silently fail
-      console.debug('Failed to update presence');
     }
   }, [roomId]);
 

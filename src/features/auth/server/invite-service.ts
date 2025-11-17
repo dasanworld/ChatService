@@ -31,8 +31,6 @@ export const validateInviteToken = async (
     .maybeSingle();
 
   if (error) {
-    // Log the error but don't expose internal details
-    console.error('Error validating invite token:', error);
     return failure(500, authErrorCodes.SIGNUP_FAILED, 'Failed to validate invite token');
   }
 

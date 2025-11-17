@@ -46,7 +46,6 @@ export const useReadReceipts = (roomId: string | null): UseReadReceiptsReturn =>
       setReadStatuses(statusMap);
     } catch (error) {
       // Silently fail for polling
-      console.debug('Failed to fetch read status');
     }
   }, [roomId]);
 
@@ -74,7 +73,6 @@ export const useReadReceipts = (roomId: string | null): UseReadReceiptsReturn =>
         });
       } catch (error) {
         // Silently fail
-        console.debug('Failed to mark message as read');
       }
     },
     [roomId],

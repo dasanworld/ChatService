@@ -85,7 +85,6 @@ export const CurrentUserProvider = ({
       router.push('/login');
     } catch (error) {
       const message = extractApiErrorMessage(error, '로그아웃에 실패했습니다');
-      console.error('Logout failed:', message);
       // Even if logout fails on server, redirect to login
       router.push('/login');
     }

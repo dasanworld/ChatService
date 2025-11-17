@@ -9,7 +9,6 @@ import { CreateRoomModal } from "@/features/room-list/components/CreateRoomModal
 import { LeaveRoomModal } from "@/features/room-list/components/LeaveRoomModal";
 import { ChatRoomDialog } from "@/features/active-room/components/ChatRoomDialog";
 import { MessageSquarePlus } from "lucide-react";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 
 type DashboardPageProps = {
   params: Promise<Record<string, never>>;
@@ -20,25 +19,6 @@ export default function DashboardPage({ params }: DashboardPageProps) {
   const { user, logout } = useCurrentUser();
   const { openModal, openChatRoom } = useUI();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string>("");
-
-  useEffect(() => {
-    // Debug: Check session
-    const checkSession = async () => {
-      const supabase = getSupabaseBrowserClient();
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        setDebugInfo(`❌ Session Error: ${error.message}`);
-      } else if (session) {
-        setDebugInfo(`✅ Session OK - User: ${session.user.email}`);
-      } else {
-        setDebugInfo(`⚠️ No session found`);
-      }
-    };
-    
-    checkSession();
-  }, []);
 
   // Auto-open chat room if redirected from invite
   useEffect(() => {
@@ -63,13 +43,6 @@ export default function DashboardPage({ params }: DashboardPageProps) {
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-12">
-      {/* Debug Info */}
-      {debugInfo && (
-        <div className="rounded bg-slate-100 p-2 text-xs font-mono">
-          {debugInfo}
-        </div>
-      )}
-
       {/* Header */}
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-2">

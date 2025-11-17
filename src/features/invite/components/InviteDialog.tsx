@@ -32,7 +32,7 @@ export const InviteDialog = ({ roomId, isOpen, onClose }: InviteDialogProps) => 
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('Failed to copy:', error);
+      setCopied(false);
     }
   };
 

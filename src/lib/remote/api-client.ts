@@ -15,19 +15,11 @@ apiClient.interceptors.request.use(
     try {
       const supabase = getSupabaseBrowserClient();
       const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        console.error('Failed to get session:', error);
-      }
-      
-      if (session?.access_token) {
+      if (!error && session?.access_token) {
         config.headers.Authorization = `Bearer ${session.access_token}`;
-        console.log('✅ Added Authorization header to request:', config.url);
-      } else {
-        console.warn('⚠️ No session token available for request:', config.url);
       }
     } catch (error) {
-      console.error('❌ Failed to get session:', error);
+      // Ignore token attachment errors to avoid blocking requests
     }
     
     return config;

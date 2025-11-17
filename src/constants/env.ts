@@ -17,7 +17,6 @@ const _clientEnv = clientEnvSchema.safeParse({
 export type ClientEnv = z.infer<typeof clientEnvSchema>;
 
 if (!_clientEnv.success) {
-  console.error('환경 변수 검증 실패:', _clientEnv.error.flatten().fieldErrors);
   throw new Error('환경 변수를 확인하세요. NEXT_PUBLIC_SUPABASE_URL과 NEXT_PUBLIC_SUPABASE_ANON_KEY가 필요합니다.');
 }
 

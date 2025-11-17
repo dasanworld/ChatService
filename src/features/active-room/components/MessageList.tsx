@@ -84,8 +84,7 @@ export const MessageList = ({ roomId }: MessageListProps) => {
           const { messages: newMessages, hasMore } = response.data;
           loadHistory(newMessages, hasMore);
         } catch (error) {
-          const msg = extractApiErrorMessage(error, '메시지 로드 실패');
-          console.error(msg);
+          extractApiErrorMessage(error, '메시지 로드 실패');
         }
       } else {
         // Detect if user scrolled down to re-enable auto-scroll

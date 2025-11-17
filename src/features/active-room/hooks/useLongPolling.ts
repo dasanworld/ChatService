@@ -56,7 +56,7 @@ export const useLongPolling = (roomId: string | null) => {
         const { likedMessageIds } = likesResponse.data;
         loadLikedMessages(likedMessageIds || []);
       } catch (err) {
-        console.error('Failed to load liked messages:', err);
+        // Ignore liked message fetch failures to keep snapshot loading non-blocking
       }
     } catch (error) {
       const message = extractApiErrorMessage(error, 'Snapshot 로드 실패');

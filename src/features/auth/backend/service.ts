@@ -61,8 +61,7 @@ export const createUserProfile = async (
 
   if (profileError) {
     // TODO: Implement rollback - delete auth user
-    // For now, log the error and return failure
-    console.error('Profile creation failed, auth user orphaned:', authData.user.id);
+    // For now, return failure
     return failure(500, authErrorCodes.PROFILE_CREATION_FAILED, profileError.message);
   }
 
@@ -76,8 +75,7 @@ export const createUserProfile = async (
       });
 
     if (roomError) {
-      console.error('Failed to add user to room:', roomError);
-      // Note: We don't fail the signup if room join fails - just log it
+      // Note: We don't fail the signup if room join fails
     }
   }
 

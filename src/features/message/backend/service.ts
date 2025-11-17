@@ -47,10 +47,7 @@ const getMessagesWithUser = async (
     .select('id, nickname, avatar_url')
     .in('id', userIds);
 
-  if (usersError) {
-    // Log error but don't fail completely
-    console.error('Failed to fetch user profiles:', usersError);
-  }
+  // Ignore profile fetch errors to avoid blocking message retrieval
 
   // Map user metadata to expected format
   const userMap = new Map(
@@ -121,10 +118,7 @@ export const getRoomSnapshot = async (
         .select('id, nickname, avatar_url')
         .in('id', userIds);
 
-      if (profilesError) {
-        // Log error but don't fail - use default user info
-        console.error('Failed to fetch profiles:', profilesError);
-      }
+      // Ignore profile fetch errors - fall back to default user info
 
       // Map user metadata to expected format
       userMap = new Map(
@@ -405,10 +399,7 @@ export const getMessageHistory = async (
         .select('id, nickname, avatar_url')
         .in('id', userIds);
 
-      if (profilesError) {
-        // Log error but don't fail - use default user info
-        console.error('Failed to fetch profiles in history:', profilesError);
-      }
+      // Ignore profile fetch errors - fall back to default user info
 
       // Map user metadata to expected format
       userMap = new Map(
