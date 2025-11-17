@@ -25,6 +25,7 @@ export const useLongPolling = (roomId: string | null) => {
     setPollingError,
     lastSyncVersion,
     loadLikedMessages,
+    isSnapshotLoaded,
   } = useActiveRoom();
 
   const { isOnline, syncStart, syncSuccess, syncError, backoffDelay } = useNetwork();
@@ -62,7 +63,16 @@ export const useLongPolling = (roomId: string | null) => {
       setPollingError(message);
       syncError(message);
     }
-  }, [roomId, receiveSnapshot, pollingStart, setPollingError, syncStart, syncSuccess, syncError]);
+  }, [
+    roomId,
+    receiveSnapshot,
+    pollingStart,
+    setPollingError,
+    syncStart,
+    syncSuccess,
+    syncError,
+    loadLikedMessages,
+  ]);
 
   /**
    * Perform Long Polling request
@@ -144,15 +154,22 @@ export const useLongPolling = (roomId: string | null) => {
     }, backoffDelay);
   }, [poll, backoffDelay]);
 
-  // Fetch snapshot on mount or roomId change
+  // Fetch snapshot on mount, room change, or when state reset (isSnapshotLoaded=false)
   useEffect(() => {
     if (!roomId) {
       snapshotFetchedRef.current = false;
       return;
     }
-    snapshotFetchedRef.current = false;
-    fetchSnapshot();
-  }, [roomId, fetchSnapshot]);
+
+    // Reset local flag when higher-level state is cleared (e.g., refresh)
+    if (!isSnapshotLoaded) {
+      snapshotFetchedRef.current = false;
+    }
+
+    if (!snapshotFetchedRef.current) {
+      fetchSnapshot();
+    }
+  }, [roomId, fetchSnapshot, isSnapshotLoaded]);
 
   // Start polling after snapshot is fetched
   useEffect(() => {
