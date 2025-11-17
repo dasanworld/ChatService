@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useActiveRoom } from '../context/ActiveRoomContext';
 import { apiClient, extractApiErrorMessage } from '@/lib/remote/api-client';
+import { useReadReceipts } from '@/features/read-receipt/hooks/useReadReceipts';
 import { MessageItem } from './MessageItem';
 import { Loader } from 'lucide-react';
 
@@ -21,6 +22,8 @@ export const MessageList = ({ roomId }: MessageListProps) => {
     isLoadingHistory,
     loadHistory,
   } = useActiveRoom();
+
+  const { readStatuses } = useReadReceipts(roomId);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -135,6 +138,7 @@ export const MessageList = ({ roomId }: MessageListProps) => {
         const isPending = pendingMessages.has(message.client_message_id || '');
         const isLiked = likedMessageIds.has(message.id);
         const isHidden = hiddenMessageIds.has(message.id);
+        const readStatus = readStatuses.get(message.id);
 
         return (
           <MessageItem
@@ -143,6 +147,7 @@ export const MessageList = ({ roomId }: MessageListProps) => {
             isPending={isPending}
             isLiked={isLiked}
             isHidden={isHidden}
+            readStatus={readStatus}
           />
         );
       })}

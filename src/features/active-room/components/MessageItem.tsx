@@ -6,13 +6,16 @@ import { ko } from 'date-fns/locale';
 import { MessageCircle, Heart, Trash2 } from 'lucide-react';
 import { useActiveRoom } from '../context/ActiveRoomContext';
 import { apiClient, extractApiErrorMessage } from '@/lib/remote/api-client';
+import { ReadReceipt } from '@/features/read-receipt/components/ReadReceipt';
 import type { MessageWithUser } from '@/features/message/backend/schema';
+import type { MessageReadStatus } from '@/features/read-receipt/backend/schema';
 
 interface MessageItemProps {
   message: MessageWithUser;
   isPending?: boolean;
   isLiked?: boolean;
   isHidden?: boolean;
+  readStatus?: MessageReadStatus | null;
 }
 
 export const MessageItem = ({
@@ -20,6 +23,7 @@ export const MessageItem = ({
   isPending = false,
   isLiked = false,
   isHidden = false,
+  readStatus = null,
 }: MessageItemProps) => {
   const { setReplyTarget, toggleLike, hideMessage } = useActiveRoom();
   const [showActions, setShowActions] = useState(false);
@@ -67,6 +71,7 @@ export const MessageItem = ({
 
   return (
     <div
+      data-message-id={message.id}
       className={`flex gap-3 px-4 py-2 transition-colors ${
         isPending ? 'opacity-75' : ''
       } hover:bg-slate-50`}
@@ -101,6 +106,9 @@ export const MessageItem = ({
             👍 {message.like_count}명
           </div>
         )}
+
+        {/* Read receipt */}
+        <ReadReceipt readStatus={readStatus} />
       </div>
 
       {/* Action buttons */}
